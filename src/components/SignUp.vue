@@ -7,21 +7,12 @@ const emit = defineEmits(['switch-view', 'signup-success'])
 const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
-const selectedHub = ref('')
 const agreeToTerms = ref(false)
 
 // UI States
 const isSubmitting = ref(false)
 const usernameTouched = ref(false)
 const passwordTouched = ref(false)
-
-// Dispatch Hub Options
-const hubs = [
-  { value: 'north', label: 'North Distribution Hub (NDH-1)' },
-  { value: 'east', label: 'East Shore Terminal (EST-4)' },
-  { value: 'metro', label: 'Metro Logistics Center (MLC-9)' },
-  { value: 'south', label: 'South Valley Depot (SVD-2)' },
-]
 
 // Username Validation
 const usernameRegex = /^[a-zA-Z0-9_]{4,16}$/
@@ -67,20 +58,13 @@ const strengthLabel = computed(() => {
   return { text: 'Strong', color: '#0D530E' } // dark green
 })
 
-// Dispatcher ID validation
-const generatedDispatcherId = computed(() => {
-  if (!username.value) return 'DSP-PENDING'
-  const cleanUser = username.value.replace(/[^a-zA-Z0-9]/g, '').substring(0, 4).toUpperCase()
-  const hubCode = selectedHub.value ? selectedHub.value.toUpperCase() : 'XX'
-  return `DSP-${cleanUser}-${hubCode}`
-})
+
 
 // Form Validation
 const isFormValid = computed(() => {
   return (
     isUsernameValid.value &&
     isPasswordValid.value &&
-    selectedHub.value !== '' &&
     agreeToTerms.value
   )
 })
@@ -97,7 +81,7 @@ const handleSignUp = () => {
   // Simulate API register request
   setTimeout(() => {
     isSubmitting.value = false
-    emit('signup-success', { username: username.value, hub: hubs.find(h => h.value === selectedHub.value)?.label.split(' (')[0] || '' })
+    emit('signup-success', { username: username.value, hub: 'Metro Logistics Hub' })
   }, 1200)
 }
 
@@ -108,7 +92,6 @@ const togglePasswordVisibility = () => {
 const resetForm = () => {
   username.value = ''
   password.value = ''
-  selectedHub.value = ''
   agreeToTerms.value = false
   usernameTouched.value = false
   passwordTouched.value = false
@@ -259,35 +242,6 @@ const resetForm = () => {
               <span v-if="usernameErrorMessage" class="error-msg">{{ usernameErrorMessage }}</span>
             </div>
 
-            <!-- Dispatch Hub Selection -->
-            <div class="form-group">
-              <label for="hub">Designated Dispatch Hub</label>
-              <div class="input-icon-wrapper">
-                <span class="field-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25s-7.5-4.108-7.5-11.25gC4.5 6.358 7.858 3 12 3s7.5 3.358 7.5 7.5z" />
-                  </svg>
-                </span>
-                <select id="hub" v-model="selectedHub" required>
-                  <option value="" disabled selected>Select assigned hub terminal...</option>
-                  <option v-for="hub in hubs" :key="hub.value" :value="hub.value">
-                    {{ hub.label }}
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Dynamic Dispatcher ID Display -->
-            <div class="form-group" v-if="username || selectedHub">
-              <label>Projected Dispatcher Identifier</label>
-              <div class="mock-id-field">
-                <span class="pulse-ring"></span>
-                <span class="id-text">{{ generatedDispatcherId }}</span>
-                <span class="badge-role">DISPATCHER LEVEL 2</span>
-              </div>
-              <p class="field-tip">Automatically computed based on username and selected region.</p>
-            </div>
 
             <!-- Password Input -->
             <div class="form-group" :class="{ 'has-error': passwordTouched && !isPasswordValid }">

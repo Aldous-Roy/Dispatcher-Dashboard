@@ -6,20 +6,10 @@ const emit = defineEmits(['switch-view', 'login-success'])
 const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
-const selectedHub = ref('')
-
 // UI States
 const isSubmitting = ref(false)
 const usernameTouched = ref(false)
 const passwordTouched = ref(false)
-
-// Dispatch Hub Options (matches SignUp options)
-const hubs = [
-  { value: 'north', label: 'North Distribution Hub (NDH-1)' },
-  { value: 'east', label: 'East Shore Terminal (EST-4)' },
-  { value: 'metro', label: 'Metro Logistics Center (MLC-9)' },
-  { value: 'south', label: 'South Valley Depot (SVD-2)' },
-]
 
 // Simple validation
 const isUsernameValid = computed(() => username.value.length >= 4)
@@ -40,7 +30,7 @@ const passwordErrorMessage = computed(() => {
 })
 
 const isFormValid = computed(() => {
-  return isUsernameValid.value && isPasswordValid.value && selectedHub.value !== ''
+  return isUsernameValid.value && isPasswordValid.value
 })
 
 const handleLogin = () => {
@@ -54,7 +44,7 @@ const handleLogin = () => {
   // Simulate server login handshake
   setTimeout(() => {
     isSubmitting.value = false
-    emit('login-success', { username: username.value, hub: hubs.find(h => h.value === selectedHub.value)?.label.split(' (')[0] || '' })
+    emit('login-success', { username: username.value, hub: 'Metro Logistics Hub' })
   }, 1200)
 }
 
@@ -65,7 +55,6 @@ const togglePasswordVisibility = () => {
 const resetForm = () => {
   username.value = ''
   password.value = ''
-  selectedHub.value = ''
   usernameTouched.value = false
   passwordTouched.value = false
   showPassword.value = false
@@ -198,24 +187,6 @@ const resetForm = () => {
               <span v-if="usernameErrorMessage" class="error-msg">{{ usernameErrorMessage }}</span>
             </div>
 
-            <!-- Designated Dispatch Hub -->
-            <div class="form-group">
-              <label for="hub">Designated Dispatch Hub</label>
-              <div class="input-icon-wrapper">
-                <span class="field-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25s-7.5-4.108-7.5-11.25gC4.5 6.358 7.858 3 12 3s7.5 3.358 7.5 7.5z" />
-                  </svg>
-                </span>
-                <select id="hub" v-model="selectedHub" required>
-                  <option value="" disabled selected>Select assigned hub terminal...</option>
-                  <option v-for="hub in hubs" :key="hub.value" :value="hub.value">
-                    {{ hub.label }}
-                  </option>
-                </select>
-              </div>
-            </div>
 
             <!-- Password Input -->
             <div class="form-group" :class="{ 'has-error': passwordErrorMessage }">

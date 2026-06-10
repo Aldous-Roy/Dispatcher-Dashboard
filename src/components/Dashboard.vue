@@ -58,7 +58,7 @@ const handleLogout = () => {
         <p class="subtitle">Logispin logistics network overview and active driver tracking</p>
       </div>
 
-      <!-- Quick Stats / KPI Cards -->
+      
       <section class="stats-panel">
         <div class="stat-card">
           <div class="icon-wrap bg-primary">

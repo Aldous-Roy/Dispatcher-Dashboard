@@ -1,71 +1,107 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../stores/auth'
 
-const emit = defineEmits(['switch-view', 'login-success'])
+const router = useRouter()
+const authStore = useAuthStore()
+
 // Form Fields
 const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
+const agreeToTerms = ref(false)
+const role = ref('DISPATCHER') // Default role per API requirements
+
 // UI States
 const isSubmitting = ref(false)
 const usernameTouched = ref(false)
 const passwordTouched = ref(false)
+const signupError = ref('')
 
-// Simple validation
-const isUsernameValid = computed(() => username.value.length >= 4)
-const isPasswordValid = computed(() => password.value.length >= 8)
-
+// Username Validation
+const usernameRegex = /^[a-zA-Z0-9_]{4,16}$/
+const isUsernameValid = computed(() => usernameRegex.test(username.value))
 const usernameErrorMessage = computed(() => {
   if (!usernameTouched.value) return ''
   if (!username.value) return 'Username is required'
-  if (username.value.length < 4) return 'Username must be at least 4 characters'
+  if (username.value.length < 4) return 'Must be at least 4 characters'
+  if (username.value.length > 16) return 'Must not exceed 16 characters'
+  if (!/^[a-zA-Z0-9_]+$/.test(username.value)) return 'Only letters, numbers, and underscores allowed'
   return ''
 })
 
-const passwordErrorMessage = computed(() => {
-  if (!passwordTouched.value) return ''
-  if (!password.value) return 'Password is required'
-  if (password.value.length < 8) return 'Password must be at least 8 characters'
-  return ''
+// Password Validation
+const passwordCriteria = computed(() => {
+  const p = password.value
+  return [
+    { label: 'At least 8 characters', met: p.length >= 8 },
+    { label: 'At least 1 uppercase letter', met: /[A-Z]/.test(p) },
+    { label: 'At least 1 number', met: /[0-9]/.test(p) },
+    { label: 'At least 1 special character', met: /[^A-Za-z0-9]/.test(p) }
+  ]
 })
 
+const isPasswordValid = computed(() => passwordCriteria.value.every(c => c.met))
+
+const passwordStrength = computed(() => {
+  if (!password.value) return 0
+  let score = 0
+  if (password.value.length >= 8) score += 25
+  if (/[A-Z]/.test(password.value)) score += 25
+  if (/[0-9]/.test(password.value)) score += 25
+  if (/[^A-Za-z0-9]/.test(password.value)) score += 25
+  return score
+})
+
+const strengthLabel = computed(() => {
+  const score = passwordStrength.value
+  if (score === 0) return { text: 'None', color: 'gray-500' }
+  if (score <= 25) return { text: 'Weak', color: '#b91c1c' } // red
+  if (score <= 50) return { text: 'Fair', color: '#d97706' } // amber
+  if (score <= 75) return { text: 'Good', color: '#306D29' } // primary green
+  return { text: 'Strong', color: '#0D530E' } // dark green
+})
+
+// Form Validation
 const isFormValid = computed(() => {
-  return isUsernameValid.value && isPasswordValid.value
+  return (
+    isUsernameValid.value &&
+    isPasswordValid.value &&
+    agreeToTerms.value
+  )
 })
 
-const handleLogin = () => {
+// Submission Handler
+const handleSignUp = async () => {
   usernameTouched.value = true
   passwordTouched.value = true
-
+  
   if (!isFormValid.value) return
 
   isSubmitting.value = true
-
-  // Simulate server login handshake
-  setTimeout(() => {
+  signupError.value = ''
+  
+  try {
+    // Call Pinia action (maps to POST /api/auth/signup)
+    await authStore.signup(username.value, password.value, role.value)
+  } catch (err: any) {
+    signupError.value = authStore.error || err.message || 'Signup failed'
+  } finally {
     isSubmitting.value = false
-    emit('login-success', { username: username.value, hub: 'Metro Logistics Hub' })
-  }, 1200)
+  }
 }
 
 const togglePasswordVisibility = () => {
   showPassword.value = !showPassword.value
 }
-
-const resetForm = () => {
-  username.value = ''
-  password.value = ''
-  usernameTouched.value = false
-  passwordTouched.value = false
-  showPassword.value = false
-}
 </script>
 
 <template>
-  <div class="login-container">
-    <!-- Main Split Login Screen -->
+  <div class="signup-container">
+    <!-- Main Split Signup Screen -->
     <div class="signup-split-layout">
-      <!-- Left Panel: Animated Fleet Radar Console -->
+      <!-- Left Panel: Animated Logistics Map & Info -->
       <div class="visual-side">
         <!-- Brand Badge -->
         <div class="brand-container">
@@ -78,75 +114,86 @@ const resetForm = () => {
         </div>
 
         <div class="hero-content">
-          <h1>Initialize Terminal Session.</h1>
+          <h1>Route Control Starts Here.</h1>
           <p>
-            Secure connection for authorized personnel. Log in to monitor active routing corridors, dispatch vehicles, and track driver SLA status.
+            Connect drivers, dispatch routes in real-time, optimize schedules, and manage exceptions from a centralized command center.
           </p>
         </div>
 
-        <!-- Fleet Radar Simulator -->
+        <!-- Animated Route Simulator Map -->
         <div class="dispatch-map-simulator">
           <svg class="map-svg" viewBox="0 0 400 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Grid Lines for Technical Dashboard Aesthetic -->
             <defs>
-              <!-- Technical Grid Pattern -->
-              <pattern id="radar-grid" width="30" height="30" patternUnits="userSpaceOnUse">
-                <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(231, 225, 177, 0.1)" stroke-width="0.8"/>
+              <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(231, 225, 177, 0.12)" stroke-width="1"/>
               </pattern>
             </defs>
-            <rect width="100%" height="100%" fill="url(#radar-grid)" rx="12" />
+            <rect width="100%" height="100%" fill="url(#grid)" rx="12" />
 
-            <!-- Concentric Radar Range Rings -->
-            <circle cx="200" cy="120" r="30" fill="none" stroke="rgba(231, 225, 177, 0.18)" stroke-width="1" />
-            <circle cx="200" cy="120" r="65" fill="none" stroke="rgba(231, 225, 177, 0.18)" stroke-dasharray="3,3" stroke-width="1" />
-            <circle cx="200" cy="120" r="100" fill="none" stroke="rgba(231, 225, 177, 0.18)" stroke-width="1" />
+            <!-- Connection Routes (Animated dashed curves) -->
+            <!-- Route A -->
+            <path id="route-a" d="M 60,160 Q 140,80 200,120 T 320,80" fill="none" stroke="var(--color-accent-sage)" stroke-width="2" stroke-dasharray="6,4" class="animated-path-1" />
+            <!-- Route B -->
+            <path id="route-b" d="M 80,60 Q 200,200 280,180" fill="none" stroke="var(--color-accent-sage)" stroke-width="1.5" stroke-dasharray="5,5" class="animated-path-2" />
             
-            <!-- Axis lines -->
-            <line x1="200" y1="10" x2="200" y2="230" stroke="rgba(231, 225, 177, 0.15)" stroke-width="1" />
-            <line x1="20" y1="120" x2="380" y2="120" stroke="rgba(231, 225, 177, 0.15)" stroke-width="1" />
+            <!-- Pulse Radar Ring on Central Hub -->
+            <circle cx="200" cy="120" r="15" fill="none" stroke="var(--color-accent-sage)" stroke-width="1" class="radar-pulse-1" />
+            <circle cx="200" cy="120" r="28" fill="none" stroke="var(--color-accent-sage)" stroke-width="1" class="radar-pulse-2" />
+
+            <!-- Hub Nodes -->
+            <!-- Central Hub (Metro) -->
+            <circle cx="200" cy="120" r="8" fill="var(--color-primary)" />
+            <circle cx="200" cy="120" r="4" fill="var(--color-bg-base)" />
+            <text x="200" y="105" text-anchor="middle" class="map-label label-bold">MLC-9 (MAIN)</text>
+
+            <!-- North Hub -->
+            <circle cx="80" cy="60" r="6" fill="var(--color-primary-dark)" />
+            <circle cx="80" cy="60" r="3" fill="var(--color-accent-sage)" />
+            <text x="80" y="48" text-anchor="middle" class="map-label">NDH-1</text>
+
+            <!-- South Hub -->
+            <circle cx="280" cy="180" r="6" fill="var(--color-primary-dark)" />
+            <circle cx="280" cy="180" r="3" fill="var(--color-accent-sage)" />
+            <text x="280" y="198" text-anchor="middle" class="map-label">SVD-2</text>
+
+            <!-- East Hub -->
+            <circle cx="320" cy="80" r="6" fill="var(--color-primary-dark)" />
+            <circle cx="320" cy="80" r="3" fill="var(--color-accent-sage)" />
+            <text x="320" y="68" text-anchor="middle" class="map-label">EST-4</text>
+
+            <!-- West Hub -->
+            <circle cx="60" cy="160" r="6" fill="var(--color-primary-dark)" />
+            <circle cx="60" cy="160" r="3" fill="var(--color-accent-sage)" />
+            <text x="60" y="178" text-anchor="middle" class="map-label">WDT-3</text>
+
+            <!-- Animated Vehicle Markers (SVG Trucks along paths) -->
+            <!-- Marker A -->
+            <g class="animated-vehicle-1">
+              <circle r="5" fill="var(--color-primary-dark)" stroke="var(--color-bg-base)" stroke-width="1" />
+              <path d="M-2 -2 L2 0 L-2 2 Z" fill="var(--color-bg-base)" transform="scale(0.8)" />
+            </g>
             
-            <!-- Rotating Radar Sweep Line -->
-            <line x1="200" y1="120" x2="200" y2="20" stroke="var(--color-accent-sage)" stroke-width="1.5" class="radar-sweep" />
-
-            <!-- Radar Blips (Simulating trucks on map) -->
-            <!-- Blip 1 (North-East) -->
-            <g class="radar-blip blip-1">
-              <circle cx="260" cy="70" r="4" fill="#10b981" />
-              <circle cx="260" cy="70" r="12" fill="none" stroke="#10b981" stroke-width="1" class="blip-pulse" />
-              <text x="270" y="73" class="blip-label">COR-301 (ACTIVE)</text>
+            <!-- Marker B -->
+            <g class="animated-vehicle-2">
+              <circle r="4" fill="var(--color-primary)" stroke="var(--color-bg-base)" stroke-width="1" />
             </g>
-
-            <!-- Blip 2 (South-West) -->
-            <g class="radar-blip blip-2">
-              <circle cx="120" cy="170" r="4" fill="#10b981" />
-              <circle cx="120" cy="170" r="12" fill="none" stroke="#10b981" stroke-width="1" class="blip-pulse" />
-              <text x="130" y="173" class="blip-label">FLEET-B4 (ON ROUTE)</text>
-            </g>
-
-            <!-- Blip 3 (Center Main Hub) -->
-            <circle cx="200" cy="120" r="6" fill="var(--color-bg-base)" stroke="var(--color-primary)" stroke-width="2" />
-            <text x="200" y="137" text-anchor="middle" class="blip-hub-label">TERMINAL GATEWAY</text>
-
-            <!-- Degree Labels -->
-            <text x="200" y="24" text-anchor="middle" class="radar-deg">000° N</text>
-            <text x="375" y="123" text-anchor="end" class="radar-deg">090° E</text>
-            <text x="200" y="226" text-anchor="middle" class="radar-deg">180° S</text>
-            <text x="25" y="123" class="radar-deg">270° W</text>
           </svg>
         </div>
 
-        <!-- System Stats Grid -->
+        <!-- Live Statistics Panel -->
         <div class="stats-grid">
           <div class="stat-card">
-            <span class="stat-value pulse-text">SECURE</span>
-            <span class="stat-desc">Security Status</span>
+            <span class="stat-value pulse-text">24 / 28</span>
+            <span class="stat-desc">Fleets Routed</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">14 Nodes</span>
-            <span class="stat-desc">Sector Corridors</span>
+            <span class="stat-value">99.8%</span>
+            <span class="stat-desc">Delivery SLA</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">100%</span>
-            <span class="stat-desc">GPS Lock Status</span>
+            <span class="stat-value">0.12s</span>
+            <span class="stat-desc">Ping Latency</span>
           </div>
         </div>
 
@@ -156,15 +203,32 @@ const resetForm = () => {
         </div>
       </div>
 
-      <!-- Right Panel: Sign In Form -->
+      <!-- Right Panel: Sign Up Form -->
       <div class="form-side">
         <div class="form-wrapper">
           <div class="form-header">
-            <h2>Terminal Sign In</h2>
-            <p>Access your designated fleet dashboard and begin planning routes.</p>
+            <h2>Register Secure Account</h2>
+            <p>Register your credentials to access your designated operations console.</p>
           </div>
 
-          <form @submit.prevent="handleLogin" class="signup-form">
+          <form @submit.prevent="handleSignUp" class="signup-form">
+            <!-- Role Selection -->
+            <div class="form-group">
+              <label for="role">Authorized Session Role</label>
+              <div class="input-icon-wrapper">
+                <span class="field-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.746 3.746 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12z" />
+                  </svg>
+                </span>
+                <select id="role" v-model="role" required>
+                  <option value="DISPATCHER">Dispatcher</option>
+                  <option value="FLEET_MANAGER">Fleet Manager</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+            </div>
+
             <!-- Username Input -->
             <div class="form-group" :class="{ 'has-error': usernameErrorMessage }">
               <label for="username">Username</label>
@@ -179,17 +243,24 @@ const resetForm = () => {
                   id="username" 
                   v-model="username"
                   @blur="usernameTouched = true"
-                  placeholder="Dispatcher username"
+                  placeholder="e.g. jsmith_dispatch"
                   autocomplete="username"
                   required
                 />
+                <!-- Username checklist feedback -->
+                <span v-if="username && isUsernameValid" class="field-feedback-success">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                </span>
               </div>
               <span v-if="usernameErrorMessage" class="error-msg">{{ usernameErrorMessage }}</span>
             </div>
 
 
+
             <!-- Password Input -->
-            <div class="form-group" :class="{ 'has-error': passwordErrorMessage }">
+            <div class="form-group" :class="{ 'has-error': passwordTouched && !isPasswordValid }">
               <label for="password">Password</label>
               <div class="input-icon-wrapper">
                 <span class="field-icon">
@@ -202,8 +273,8 @@ const resetForm = () => {
                   id="password" 
                   v-model="password"
                   @blur="passwordTouched = true"
-                  placeholder="Enter security password"
-                  autocomplete="current-password"
+                  placeholder="Create a secure password"
+                  autocomplete="new-password"
                   required
                 />
                 <button type="button" @click="togglePasswordVisibility" class="btn-toggle-eye" aria-label="Toggle Password Visibility">
@@ -218,7 +289,50 @@ const resetForm = () => {
                   </svg>
                 </button>
               </div>
-              <span v-if="passwordErrorMessage" class="error-msg">{{ passwordErrorMessage }}</span>
+
+              <!-- Password Strength Analyzer -->
+              <div v-if="password" class="password-strength-box">
+                <div class="strength-bar-container">
+                  <div class="strength-bar" :style="{ width: passwordStrength + '%', backgroundColor: strengthLabel.color }"></div>
+                </div>
+                <div class="strength-info">
+                  <span class="strength-text">Password Strength: <strong>{{ strengthLabel.text }}</strong></span>
+                </div>
+
+                <!-- Criteria Checklist -->
+                <ul class="criteria-list">
+                  <li v-for="(criterion, idx) in passwordCriteria" :key="idx" :class="{ 'met': criterion.met }">
+                    <span class="bullet-icon">
+                      <svg v-if="criterion.met" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                    </span>
+                    <span class="criterion-label">{{ criterion.label }}</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Terms and Agreements -->
+            <div class="form-checkbox">
+              <label class="checkbox-container">
+                <input type="checkbox" v-model="agreeToTerms" required />
+                <span class="checkmark"></span>
+                <span class="checkbox-text">
+                  I agree to the Logispin Dispatch Security Terms and operational guidelines for coordinate transmission.
+                </span>
+              </label>
+            </div>
+
+            <!-- Signup Error Alert -->
+            <div v-if="signupError" class="login-error-alert">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="alert-icon">
+                <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd" />
+              </svg>
+              <span>{{ signupError }}</span>
             </div>
 
             <!-- Submit Button -->
@@ -228,15 +342,15 @@ const resetForm = () => {
                   <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="spinner-track"></circle>
                   <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" class="spinner-head"></path>
                 </svg>
-                Syncing Credentials...
+                Processing Handshake...
               </span>
-              <span v-else>Initialize Terminal Session</span>
+              <span v-else>Register Secure Account</span>
             </button>
           </form>
 
           <div class="form-footer">
-            <p>New dispatcher on this terminal?</p>
-            <a href="#" @click.prevent="emit('switch-view')" class="login-link">Register Dispatcher Identity</a>
+            <p>Already registered on this terminal?</p>
+            <a href="#" @click.prevent="router.push('/login')" class="login-link">Access Portal Login</a>
           </div>
         </div>
       </div>
@@ -246,7 +360,7 @@ const resetForm = () => {
 
 <style scoped>
 /* Main Container styling */
-.login-container {
+.signup-container {
   width: 100%;
   min-height: 100vh;
   display: flex;
@@ -274,6 +388,7 @@ const resetForm = () => {
   overflow: hidden;
 }
 
+/* Visual Background Grid Decorator */
 .visual-side::before {
   content: '';
   position: absolute;
@@ -334,7 +449,7 @@ const resetForm = () => {
   line-height: 1.6;
 }
 
-/* Radar Simulator Layout */
+/* Map Simulator Styles */
 .dispatch-map-simulator {
   margin: 32px 0;
   background: rgba(13, 83, 14, 0.4);
@@ -353,67 +468,83 @@ const resetForm = () => {
   display: block;
 }
 
-.radar-sweep {
-  transform-origin: 200px 120px;
-  animation: sweepRadar 6s linear infinite;
-}
-
-@keyframes sweepRadar {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* Radar Blip Animations */
-.radar-blip {
-  opacity: 0;
-  animation: blipFade 6s infinite ease-out;
-}
-
-.blip-1 {
-  animation-delay: 1.2s;
-}
-
-.blip-2 {
-  animation-delay: 4.2s;
-}
-
-.blip-pulse {
-  transform-origin: inherit;
-  animation: blipRing 1.5s ease-out infinite;
-}
-
-@keyframes blipFade {
-  0% { opacity: 0; }
-  10% { opacity: 1; }
-  50% { opacity: 0.8; }
-  100% { opacity: 0; }
-}
-
-@keyframes blipRing {
-  0% { transform: scale(0.3); opacity: 0.8; }
-  100% { transform: scale(1.3); opacity: 0; }
-}
-
-/* SVG Text elements style */
-.blip-label {
-  font-size: 8px;
-  fill: #34d399;
-  font-family: var(--font-mono, monospace);
-  font-weight: bold;
-}
-
-.blip-hub-label {
+.map-label {
   font-size: 9px;
-  fill: var(--color-white);
+  fill: var(--color-accent-sage);
   font-family: var(--font-sans);
-  font-weight: bold;
+  letter-spacing: 0.5px;
 }
 
-.radar-deg {
-  font-size: 8px;
-  fill: var(--color-accent-sage);
-  opacity: 0.6;
-  font-family: var(--font-mono, monospace);
+.label-bold {
+  font-weight: bold;
+  fill: var(--color-white);
+  font-size: 10px;
+}
+
+/* Route SVG Animations */
+.animated-path-1 {
+  stroke-dasharray: 8, 6;
+  animation: dash1 25s linear infinite;
+}
+
+.animated-path-2 {
+  stroke-dasharray: 6, 6;
+  animation: dash2 20s linear infinite;
+}
+
+@keyframes dash1 {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+@keyframes dash2 {
+  to {
+    stroke-dashoffset: 1000;
+  }
+}
+
+/* Radar Pulse Animations */
+.radar-pulse-1, .radar-pulse-2 {
+  transform-origin: 200px 120px;
+  animation: pulseRadar 3s ease-out infinite;
+}
+
+.radar-pulse-2 {
+  animation-delay: 1.5s;
+}
+
+@keyframes pulseRadar {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* Vehicle Markers along SVG path motion */
+.animated-vehicle-1 {
+  offset-path: path("M 60,160 Q 140,80 200,120 T 320,80");
+  animation: travel-1 15s linear infinite;
+  offset-rotate: auto;
+}
+
+.animated-vehicle-2 {
+  offset-path: path("M 80,60 Q 200,200 280,180");
+  animation: travel-2 12s linear infinite alternate;
+}
+
+@keyframes travel-1 {
+  0% { offset-distance: 0%; }
+  100% { offset-distance: 100%; }
+}
+
+@keyframes travel-2 {
+  0% { offset-distance: 0%; }
+  100% { offset-distance: 100%; }
 }
 
 /* Stats Dashboard Grid */
@@ -460,8 +591,8 @@ const resetForm = () => {
 }
 
 @keyframes textPulse {
-  0%, 100% { opacity: 0.9; color: #10b981; }
-  50% { opacity: 1; color: var(--color-white); }
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; color: var(--color-accent-sage); }
 }
 
 .visual-footer {
@@ -472,6 +603,7 @@ const resetForm = () => {
   margin-top: 24px;
   z-index: 10;
 }
+
 
 /* RIGHT PANEL: FORM SECTION */
 .form-side {
@@ -512,6 +644,7 @@ const resetForm = () => {
   line-height: 1.5;
 }
 
+/* Signup Inputs Styles */
 .signup-form {
   display: flex;
   flex-direction: column;
@@ -581,6 +714,7 @@ const resetForm = () => {
   box-shadow: 0 0 0 4px rgba(48, 109, 41, 0.08);
 }
 
+/* Arrow dropdown reset for styled Select */
 .input-icon-wrapper select {
   appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a826e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
@@ -591,6 +725,7 @@ const resetForm = () => {
   cursor: pointer;
 }
 
+/* Password Eye Button */
 .btn-toggle-eye {
   position: absolute;
   right: 14px;
@@ -613,6 +748,20 @@ const resetForm = () => {
   height: 20px;
 }
 
+/* Checkmark dynamic success icon on username */
+.field-feedback-success {
+  position: absolute;
+  right: 14px;
+  color: var(--color-success);
+  display: flex;
+  align-items: center;
+}
+
+.field-feedback-success svg {
+  width: 18px;
+  height: 18px;
+}
+
 .has-error .input-icon-wrapper input {
   border-color: var(--color-danger);
   background-color: var(--color-danger-bg);
@@ -629,6 +778,213 @@ const resetForm = () => {
   display: flex;
   align-items: center;
   margin-top: 2px;
+}
+
+/* Projected Dispatcher ID style */
+.mock-id-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--color-gray-100);
+  border: 1px dashed var(--color-accent-sage);
+  border-radius: 8px;
+  padding: 10px 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mock-id-field::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: var(--color-primary);
+}
+
+.pulse-ring {
+  width: 6px;
+  height: 6px;
+  background-color: var(--color-primary);
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+  animation: pulseIndicator 1.5s infinite;
+}
+
+@keyframes pulseIndicator {
+  0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(48, 109, 41, 0.4); }
+  70% { transform: scale(1.1); opacity: 0.5; box-shadow: 0 0 0 6px rgba(48, 109, 41, 0); }
+  100% { transform: scale(1); opacity: 0; box-shadow: 0 0 0 0 rgba(48, 109, 41, 0); }
+}
+
+.id-text {
+  font-family: var(--font-mono, monospace);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  flex-grow: 1;
+}
+
+.badge-role {
+  font-size: 10px;
+  font-weight: 700;
+  background-color: var(--color-accent-sage);
+  color: var(--color-primary-dark);
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.field-tip {
+  font-size: 11px;
+  color: var(--color-gray-500);
+}
+
+/* Password Strength Box */
+.password-strength-box {
+  margin-top: 10px;
+  background: var(--color-gray-50);
+  border: 1.5px solid var(--color-gray-100);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.strength-bar-container {
+  width: 100%;
+  height: 5px;
+  background-color: var(--color-gray-200);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.strength-bar {
+  height: 100%;
+  transition: width 0.4s ease, background-color 0.4s;
+  width: 0;
+}
+
+.strength-info {
+  font-size: 12.5px;
+  color: var(--color-gray-800);
+}
+
+.criteria-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  margin-top: 4px;
+}
+
+.criteria-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-gray-500);
+  transition: color 0.25s;
+}
+
+.criteria-list li.met {
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+.bullet-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--color-gray-200);
+  color: var(--color-gray-500);
+  transition: all 0.25s;
+}
+
+.criteria-list li.met .bullet-icon {
+  background-color: rgba(21, 128, 61, 0.12);
+  color: var(--color-success);
+}
+
+.bullet-icon svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Custom Styled Checkbox */
+.form-checkbox {
+  margin-top: 6px;
+}
+
+.checkbox-container {
+  display: flex;
+  position: relative;
+  padding-left: 28px;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--color-gray-800);
+  user-select: none;
+  line-height: 1.4;
+}
+
+.checkbox-container input {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.checkmark {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  height: 18px;
+  width: 18px;
+  background-color: var(--color-gray-50);
+  border: 1.5px solid var(--color-gray-200);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.checkbox-container:hover input ~ .checkmark {
+  border-color: var(--color-accent-sage);
+}
+
+.checkbox-container input:checked ~ .checkmark {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+}
+
+.checkbox-container input:checked ~ .checkmark:after {
+  display: block;
+}
+
+.checkbox-container .checkmark:after {
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--color-white);
+  border-width: 0 2.2px 2.2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-text {
+  font-weight: 500;
 }
 
 /* Submit Button */
@@ -667,7 +1023,7 @@ const resetForm = () => {
   box-shadow: none;
 }
 
-/* Loader Animation */
+/* Loader Animation inside Button */
 .loading-state {
   display: flex;
   align-items: center;
@@ -688,6 +1044,7 @@ const resetForm = () => {
   100% { transform: rotate(360deg); }
 }
 
+/* Footer Link styling */
 .form-footer {
   margin-top: 32px;
   text-align: center;
@@ -822,7 +1179,7 @@ const resetForm = () => {
   margin-bottom: 28px;
 }
 
-/* Details Panel */
+/* System Details panel */
 .details-panel {
   background-color: var(--color-gray-50);
   border: 1px solid var(--color-gray-200);
@@ -929,33 +1286,56 @@ const resetForm = () => {
   height: 18px;
 }
 
+.login-error-alert {
+  background-color: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 8px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.alert-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--color-danger);
+}
+
 /* RESPONSIVE BREAKPOINTS */
 @media (max-width: 1024px) {
   .signup-split-layout {
     flex-direction: column;
   }
-
+  
   .visual-side {
     padding: 32px;
     min-height: auto;
   }
-
+  
   .hero-content h1 {
     font-size: 32px;
   }
-
+  
   .dispatch-map-simulator {
     margin: 20px 0;
   }
-
+  
   .form-side {
     padding: 40px 20px;
   }
-
+  
   .success-console {
     padding: 20px 10px;
   }
-
+  
   .console-body {
     padding: 24px 16px;
   }

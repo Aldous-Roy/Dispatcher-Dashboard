@@ -75,7 +75,7 @@ const togglePasswordVisibility = () => {
               <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125a1.125 1.125 0 0 0 1.125-1.125V9.75M3.75 12h12.75M3 14.25h13.5m0 0V9.75M16.5 9.75V5.25A2.25 2.25 0 0 0 14.25 3H6.125A2.25 2.25 0 0 0 3.875 5.25V14.25m12.625-4.5h2.375A2.25 2.25 0 0 1 21 12v3.75m-2.25-5.25v2.25m-15-2.25h12" />
             </svg>
           </div>
-          <span class="brand-name">LOGISPIN</span>
+          <span class="brand-name">LAST-MILE</span>
         </div>
 
         <div class="hero-content">
@@ -152,7 +152,7 @@ const togglePasswordVisibility = () => {
         </div>
 
         <div class="visual-footer">
-          <span>Logispin Dispatch Systems Inc.</span>
+          <span>Last-Mile Dispatch Systems Inc.</span>
           <span>System Version: 2026.1</span>
         </div>
       </div>

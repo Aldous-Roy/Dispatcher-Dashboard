@@ -556,7 +556,7 @@ const triggerPrint = () => {
   <div class="manager-container">
     <!-- Printable Only Header -->
     <div class="print-banner">
-      <h2>LOGISPIN EXECUTIVE FLEET ANALYTICS REPORT</h2>
+      <h2>LAST-MILE EXECUTIVE FLEET ANALYTICS REPORT</h2>
       <p class="print-meta">
         Generated: {{ new Date().toLocaleString() }} | 
         User: {{ authStore.name }} (ID: {{ authStore.employeeId }} | Role: {{ authStore.role }}) | 
@@ -574,7 +574,7 @@ const triggerPrint = () => {
           </svg>
         </div>
         <div class="brand-text">
-          <span class="brand-title">LOGISPIN</span>
+          <span class="brand-title">LAST-MILE</span>
           <span class="brand-subtitle">EXECUTIVE CONSOLE</span>
         </div>
       </div>
@@ -649,7 +649,7 @@ const triggerPrint = () => {
       <!-- Top Action Bar -->
       <header class="main-header">
         <div class="header-titles">
-          <h1>Logispin Executive Dashboard</h1>
+          <h1>Last-Mile Executive Dashboard</h1>
           <p>Analytical operations overview for terminal <strong>{{ authStore.hub }}</strong></p>
         </div>
 

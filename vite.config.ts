@@ -8,9 +8,11 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
+    host: true,
     proxy: {
       '/api': {
-        target: 'https://virtusa-logistics.onrender.com',
+        //target: 'https://virtusa-logistics.onrender.com',
+        target: 'http://192.168.137.1:8080',
         changeOrigin: true,
         secure: false
       }

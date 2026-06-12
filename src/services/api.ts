@@ -10,6 +10,12 @@ const apiClient = axios.create({
 // Request Interceptor: Inject JWT token if it exists in local storage
 apiClient.interceptors.request.use(
   (config) => {
+    // Do not inject Authorization header for authentication endpoints
+    const isAuthEndpoint = config.url && (config.url.includes('/auth/login') || config.url.includes('/auth/signup'))
+    if (isAuthEndpoint) {
+      return config
+    }
+
     const sessionStr = localStorage.getItem('auth_session')
     if (sessionStr) {
       try {

@@ -1,21 +1,38 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import CSVUpload from '../common/CSVUpload.vue'
 import type { ParsedStop } from '../common/CSVUpload.vue'
-import { useAuthStore } from '../../stores/auth'
 import apiClient from '../../services/api'
+import DashboardLayout from '../common/DashboardLayout.vue'
 
-const authStore = useAuthStore()
+const router = useRouter()
 
-interface Stop extends ParsedStop {
-  status: 'Pending' | 'Completed'
+const navigateToRoute = (routeId?: string) => {
+  if (routeId) {
+    router.push(`/routes/${routeId}`)
+  }
+}
+
+interface Stop {
+  id: string // maps to orderId
+  address: string // maps to deliveryAddress
+  customerName: string
+  customerPhone?: string
+  packageCount: number
+  priority: 'High' | 'Medium' | 'Low'
+  latitude: number
+  longitude: number
+  geocoding: boolean
+  status: 'PENDING' | 'ROUTED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'FAILED'
+  failedReasonNotes?: string | null
 }
 
 // Emits left for backwards compatibility if needed, but we route directly
 const emit = defineEmits(['logout'])
 
-// Active tab view: 'fleet' (original overview) or 'planner' (route planning board)
-const currentTab = ref<'fleet' | 'planner'>('fleet')
+// Active tab view: 'fleet' (original overview), 'planner' (route planning board), or 'routes' (routes list)
+const currentTab = ref<'fleet' | 'planner' | 'routes'>('fleet')
 
 // Drag & Drop State tracking
 const draggedStopId = ref('')
@@ -32,9 +49,11 @@ const pendingStops = ref<Stop[]>([])
 interface Driver {
   id: string
   name: string
-  route: string
   status: string
   phone: string
+  routeCode?: string
+  routeId?: string
+  routeStatus?: 'DRAFT' | 'PUBLISHED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
   stopsList: Stop[]
 }
 
@@ -67,6 +86,8 @@ interface DashboardData {
 const dashboardMetrics = ref<DashboardData | null>(null)
 
 const loadDashboardMetrics = async () => {
+  // Commented out live API call per user request to display static mock data instead
+  /*
   try {
     const response = await apiClient.get('/dashboard/summary')
     if (response.data && response.data.status === 'success') {
@@ -75,33 +96,125 @@ const loadDashboardMetrics = async () => {
   } catch (err) {
     console.warn('Failed to load dashboard metrics from API:', err)
   }
+  */
+  
+  // Static mock summary metrics
+  dashboardMetrics.value = {
+    totalUsers: 13,
+    totalDrivers: 4,
+    activeDrivers: 4,
+    totalRoutes: 3,
+    routesByStatus: {
+      DRAFT: 1,
+      PUBLISHED: 1,
+      ACTIVE: 1,
+      COMPLETED: 0,
+      CANCELLED: 0
+    },
+    ordersByStatus: {
+      PENDING: 1,
+      ROUTED: 2,
+      OUT_FOR_DELIVERY: 1,
+      DELIVERED: 4,
+      FAILED: 0
+    },
+    deliveredToday: 4,
+    pendingPods: 2
+  }
+}
+
+const mapApiStop = (apiStop: any): Stop => {
+  return {
+    id: apiStop.orderId,
+    address: apiStop.deliveryAddress || apiStop.address || 'Unknown Address',
+    customerName: apiStop.customerName || 'Unknown Customer',
+    customerPhone: apiStop.customerPhone || '',
+    packageCount: apiStop.packageCount || (apiStop.packageWeightKg ? Math.ceil(apiStop.packageWeightKg / 1.5) : 1),
+    priority: apiStop.requiredPodType === 'PHOTO_REQUIRED' ? 'High' : 'Medium',
+    latitude: apiStop.latitude || 12.9715987,
+    longitude: apiStop.longitude || 77.594566,
+    geocoding: false,
+    status: apiStop.status || 'PENDING',
+    failedReasonNotes: apiStop.failedReasonNotes || null
+  }
 }
 
 const loadAndSeedDrivers = async () => {
   try {
+    // 1. Load drivers
     const response = await apiClient.get('/drivers')
-    if (response.data && response.data.status === 'success') {
-      const apiDrivers = response.data.data || []
-      mapApiDrivers(apiDrivers)
+    if (!response.data || response.data.status !== 'success') {
+      console.warn('Failed to load drivers from API')
+      return
     }
-  } catch (err) {
-    console.warn('API call failed to load drivers:', err)
-  }
-}
+    const apiDrivers = response.data.data || []
 
-const mapApiDrivers = (apiDrivers: any[]) => {
-  const routes = ['DEL-NCR-01', 'MUM-WST-04', 'BLR-OUT-02', 'HYD-MTR-09', 'DEL-SOUTH-02', 'BLR-EC-05']
-  activeDrivers.value = apiDrivers.map((apiDriver, index) => {
-    const fullName = `${apiDriver.firstName} ${apiDriver.lastName}`
-    return {
-      id: apiDriver.employeeId || `DRV-${apiDriver.driverId}`,
-      name: fullName,
-      route: routes[index % routes.length],
-      status: apiDriver.active ? 'Active' : 'Inactive',
-      phone: apiDriver.phoneNumber ? `+91 ${apiDriver.phoneNumber}` : '+91 99999 99999',
-      stopsList: []
+    // 2. Load all routes
+    let apiRoutes: any[] = []
+    try {
+      const routesRes = await apiClient.get('/routes?size=100')
+      if (routesRes.data && routesRes.data.status === 'success') {
+        apiRoutes = routesRes.data.data?.content || routesRes.data.data || []
+      }
+    } catch (err) {
+      console.warn('API call failed to load routes:', err)
     }
-  })
+
+    // 3. For each route, load stops
+    const routesWithStops = await Promise.all(
+      apiRoutes.map(async (route: any) => {
+        let stops: any[] = []
+        try {
+          const stopsRes = await apiClient.get(`/routes/${route.routeId}/stops?size=100`)
+          if (stopsRes.data && stopsRes.data.status === 'success') {
+            stops = stopsRes.data.data?.content || stopsRes.data.data || []
+          }
+        } catch (err) {
+          console.warn(`Failed to load stops for route ${route.routeId}:`, err)
+        }
+        return {
+          ...route,
+          stops: stops.map(mapApiStop)
+        }
+      })
+    )
+
+    // 4. Map and pair drivers with backend routes
+    activeDrivers.value = apiDrivers.map((apiDriver: any) => {
+      const assignedRoute = routesWithStops.find(
+        (r: any) => r.driverId === apiDriver.driverId || r.driverId === apiDriver.employeeId
+      )
+      const fullName = `${apiDriver.firstName} ${apiDriver.lastName}`
+      return {
+        id: apiDriver.employeeId || `DRV-${apiDriver.driverId}`,
+        name: fullName,
+        status: apiDriver.active ? 'Active' : 'Inactive',
+        phone: apiDriver.phoneNumber ? `+91 ${apiDriver.phoneNumber}` : '+91 99999 99999',
+        routeId: assignedRoute?.routeId,
+        routeCode: assignedRoute?.routeCode,
+        routeStatus: assignedRoute?.status,
+        stopsList: assignedRoute?.stops || []
+      }
+    })
+
+    // 5. Populate masterRoutes for the Routes list tab without making duplicate requests
+    masterRoutes.value = routesWithStops.map((route: any) => {
+      const matchedDriver = apiDrivers.find(
+        (d: any) => d.driverId === route.driverId || d.employeeId === route.driverId
+      )
+      const driverName = matchedDriver ? `${matchedDriver.firstName} ${matchedDriver.lastName}` : null
+      return {
+        routeId: route.routeId,
+        routeCode: route.routeCode,
+        routeDate: route.routeDate,
+        driverName,
+        stopsCount: route.stops?.length || 0,
+        status: route.status
+      }
+    })
+  } catch (err) {
+    console.error('Error synchronizing drivers, routes, and stops:', err)
+  }
 }
 
 onMounted(() => {
@@ -123,7 +236,7 @@ const activeFleetsCount = computed(() => {
   }
   // Counts drivers that have active (pending) stops assigned and are not marked complete
   return activeDrivers.value.filter(d => 
-    d.stopsList.some(s => s.status === 'Pending') && d.status !== 'Completed'
+    d.stopsList.some(s => s.status === 'PENDING') && d.status !== 'Completed'
   ).length
 })
 
@@ -132,7 +245,7 @@ const totalCompletedStops = computed(() => {
     return dashboardMetrics.value.deliveredToday
   }
   return activeDrivers.value.reduce((acc, d) => 
-    acc + d.stopsList.filter(s => s.status === 'Completed').length, 0
+    acc + d.stopsList.filter(s => s.status === 'DELIVERED').length, 0
   )
 })
 
@@ -152,7 +265,7 @@ const pendingExceptionsCount = computed(() => {
   // Count High priority stops that are unassigned (pending) or assigned but not completed
   const pendingHigh = pendingStops.value.filter(s => s.priority === 'High').length
   const driverHigh = activeDrivers.value.reduce((acc, d) => 
-    acc + d.stopsList.filter(s => s.priority === 'High' && s.status === 'Pending').length, 0
+    acc + d.stopsList.filter(s => s.priority === 'High' && s.status === 'PENDING').length, 0
   )
   return pendingHigh + driverHigh
 })
@@ -200,42 +313,57 @@ const getPercentage = (count: number, total: number) => {
 const getStopRatio = (driver: typeof activeDrivers.value[0]) => {
   const total = driver.stopsList.length
   if (total === 0) return '0/0'
-  const completed = driver.stopsList.filter(s => s.status === 'Completed').length
+  const completed = driver.stopsList.filter(s => s.status === 'DELIVERED').length
   return `${completed}/${total}`
 }
 
-// LOGOUT TRIGGER
-const handleLogout = () => {
-  authStore.logout()
-}
-
 // CSV IMPORT & SIMULATED GEOCODING
-const handleStopsLoaded = (loadedStops: ParsedStop[]) => {
+const handleStopsLoaded = async (loadedStops: ParsedStop[]) => {
   dashboardMetrics.value = null // Switch to dynamic client-side calculations
-  const stopsWithStatus = loadedStops.map(s => ({
-    ...s,
-    status: 'Pending' as const
-  }))
 
-  pendingStops.value.push(...stopsWithStatus)
+  for (const s of loadedStops) {
+    const latOffset = (Math.random() - 0.5) * 0.08
+    const lngOffset = (Math.random() - 0.5) * 0.08
+    const latitude = parseFloat((28.6139 + latOffset).toFixed(5))
+    const longitude = parseFloat((77.2090 + lngOffset).toFixed(5))
+    const orderId = s.id.startsWith('STP-') ? s.id.replace('STP-', 'ORD-') : s.id
 
-  // Trigger individual geocoding simulation with offsets around central Indian coordinates (Delhi/NCR)
-  stopsWithStatus.forEach(stop => {
-    setTimeout(() => {
-      const latOffset = (Math.random() - 0.5) * 0.08
-      const lngOffset = (Math.random() - 0.5) * 0.08
-      
-      // Look up target stop reference in either queue to update lat/long
-      const targetStop = pendingStops.value.find(s => s.id === stop.id) || 
-                         activeDrivers.value.flatMap(d => d.stopsList).find(s => s.id === stop.id)
-      
-      if (targetStop) {
-        targetStop.latitude = parseFloat((28.6139 + latOffset).toFixed(5))
-        targetStop.longitude = parseFloat((77.2090 + lngOffset).toFixed(5))
-        targetStop.geocoding = false
+    try {
+      // POST to stops API
+      await apiClient.post('/stops', {
+        orderId,
+        routeCode: null,
+        customerName: s.customerName,
+        customerPhone: '+91 99999 99999',
+        deliveryAddress: s.address,
+        latitude,
+        longitude,
+        timeWindowStart: new Date().toISOString().slice(0, 10) + 'T09:00:00',
+        timeWindowEnd: new Date().toISOString().slice(0, 10) + 'T18:00:00',
+        packageWeightKg: s.packageCount * 1.5,
+        packageVolumeCbms: s.packageCount * 0.01,
+        serviceTimeMins: 5,
+        requiredPodType: s.priority === 'High' ? 'PHOTO_REQUIRED' : 'SIGNATURE_REQUIRED'
+      })
+
+      const stopObj: Stop = {
+        id: orderId,
+        address: s.address,
+        customerName: s.customerName,
+        customerPhone: '+91 99999 99999',
+        packageCount: s.packageCount,
+        priority: s.priority,
+        latitude,
+        longitude,
+        geocoding: false,
+        status: 'PENDING',
+        failedReasonNotes: null
       }
-    }, 1200 + Math.random() * 1500)
-  })
+      pendingStops.value.push(stopObj)
+    } catch (err) {
+      console.error(`Failed to register stop ${orderId} on backend:`, err)
+    }
+  }
 }
 
 // DRAG AND DROP HANDLERS (NATIVE HTML5)
@@ -273,7 +401,7 @@ const handleDrop = (e: DragEvent, toLane: string, targetStopId?: string) => {
 }
 
 // Shift stops logic supporting inter-lane move and intra-lane sequence reordering
-const moveStop = (stopId: string, fromLane: string, toLane: string, targetStopId?: string) => {
+const moveStop = async (stopId: string, fromLane: string, toLane: string, targetStopId?: string) => {
   dashboardMetrics.value = null // Switch to dynamic client-side calculations
   let stopObj: Stop | undefined
 
@@ -295,13 +423,9 @@ const moveStop = (stopId: string, fromLane: string, toLane: string, targetStopId
 
   if (!stopObj) return
 
-  // Ensure stop status is reset if moved back to pending, or set to pending in driver lane
+  // 2. Insert into target lane at specific location or at end in UI
   if (toLane === 'pending') {
-    stopObj.status = 'Pending'
-  }
-
-  // 2. Insert into target lane at specific location or at end
-  if (toLane === 'pending') {
+    stopObj.status = 'PENDING'
     if (targetStopId) {
       const targetIdx = pendingStops.value.findIndex(s => s.id === targetStopId)
       if (targetIdx !== -1) {
@@ -315,6 +439,7 @@ const moveStop = (stopId: string, fromLane: string, toLane: string, targetStopId
   } else {
     const driver = activeDrivers.value.find(d => d.id === toLane)
     if (driver) {
+      stopObj.status = 'ROUTED'
       if (targetStopId) {
         const targetIdx = driver.stopsList.findIndex(s => s.id === targetStopId)
         if (targetIdx !== -1) {
@@ -327,10 +452,64 @@ const moveStop = (stopId: string, fromLane: string, toLane: string, targetStopId
       }
     }
   }
+
+  // 3. Sync with backend database
+  try {
+    if (toLane === 'pending') {
+      await apiClient.patch(`/stops/${stopId}/status`, {
+        status: 'PENDING',
+        failedReasonNotes: null
+      })
+    } else {
+      const driver = activeDrivers.value.find(d => d.id === toLane)
+      if (driver) {
+        let routeId = driver.routeId
+        let routeCode = driver.routeCode
+
+        // If driver doesn't have a route, create a new DRAFT route
+        if (!routeId) {
+          routeCode = 'RT-' + driver.id + '-' + Date.now().toString().slice(-6)
+          const routeRes = await apiClient.post('/routes', {
+            routeCode,
+            routeDate: new Date().toISOString().slice(0, 10),
+            totalDistanceKm: 32.5,
+            estimatedDurationMins: 110,
+            routePolyline: 'encoded-polyline-placeholder'
+          })
+
+          if (routeRes.data && routeRes.data.status === 'success') {
+            routeId = routeRes.data.data.routeId
+            // Assign driver to route
+            await apiClient.post(`/routes/${routeId}/assign-driver`, {
+              driverId: driver.id
+            })
+
+            driver.routeId = routeId
+            driver.routeCode = routeCode
+            driver.routeStatus = 'DRAFT'
+          }
+        }
+
+        if (routeId) {
+          // Assign stop to route
+          await apiClient.post(`/routes/${routeId}/assign-orders`, {
+            orderIds: [stopId]
+          })
+
+          // Update stop status to ROUTED
+          await apiClient.patch(`/stops/${stopId}/status`, {
+            status: 'ROUTED',
+            failedReasonNotes: null
+          })
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to sync stop assignment with backend API:', err)
+  }
 }
 
-// Unassign / remove stop action trigger button
-const unassignStop = (stopId: string, driverId: string) => {
+const unassignStop = async (stopId: string, driverId: string) => {
   dashboardMetrics.value = null // Switch to dynamic client-side calculations
   const driver = activeDrivers.value.find(d => d.id === driverId)
   if (!driver) return
@@ -338,101 +517,211 @@ const unassignStop = (stopId: string, driverId: string) => {
   const idx = driver.stopsList.findIndex(s => s.id === stopId)
   if (idx !== -1) {
     const stop = driver.stopsList.splice(idx, 1)[0]
-    stop.status = 'Pending'
+    stop.status = 'PENDING'
     pendingStops.value.push(stop)
+
+    try {
+      await apiClient.patch(`/stops/${stopId}/status`, {
+        status: 'PENDING',
+        failedReasonNotes: null
+      })
+    } catch (err) {
+      console.error(`Failed to unassign stop ${stopId} on backend:`, err)
+    }
+  }
+}
+
+const publishRoute = async (driver: Driver) => {
+  if (!driver.routeId) return
+  try {
+    const res = await apiClient.post(`/routes/${driver.routeId}/publish`)
+    if (res.data && res.data.status === 'success') {
+      driver.routeStatus = 'PUBLISHED'
+    }
+  } catch (err) {
+    console.error(`Failed to publish route ${driver.routeId}:`, err)
+  }
+}
+
+const activateRoute = async (driver: Driver) => {
+  if (!driver.routeId) return
+  try {
+    const res = await apiClient.post(`/routes/${driver.routeId}/activate`)
+    if (res.data && res.data.status === 'success') {
+      driver.routeStatus = 'ACTIVE'
+    }
+  } catch (err) {
+    console.error(`Failed to activate route ${driver.routeId}:`, err)
+  }
+}
+
+const cancelRoute = async (driver: Driver) => {
+  if (!driver.routeId) return
+  try {
+    const res = await apiClient.post(`/routes/${driver.routeId}/cancel`)
+    if (res.data && res.data.status === 'success') {
+      driver.routeStatus = 'CANCELLED'
+    }
+  } catch (err) {
+    console.error(`Failed to cancel route ${driver.routeId}:`, err)
+  }
+}
+
+const completeRoute = async (driver: Driver) => {
+  if (!driver.routeId) return
+  try {
+    const res = await apiClient.post(`/routes/${driver.routeId}/complete`)
+    if (res.data && res.data.status === 'success') {
+      driver.routeStatus = 'COMPLETED'
+    }
+  } catch (err) {
+    console.error(`Failed to complete route ${driver.routeId}:`, err)
   }
 }
 
 // Pushes current layout configuration to simulated API
-const publishRoutes = () => {
+const publishRoutes = async () => {
   isPublishing.value = true
-  setTimeout(() => {
-    isPublishing.value = false
+  try {
+    const draftDrivers = activeDrivers.value.filter(d => d.routeId && d.routeStatus === 'DRAFT')
+    await Promise.all(draftDrivers.map(publishRoute))
     showPublishSuccess.value = true
-    loadDashboardMetrics() // Refresh metrics from API
     // Dismiss toast after delay
     setTimeout(() => {
       showPublishSuccess.value = false
     }, 4500)
-  }, 2200)
+  } catch (err) {
+    console.error('Failed to publish draft routes:', err)
+  } finally {
+    isPublishing.value = false
+  }
+}
+
+const startDelivery = async (stop: Stop) => {
+  try {
+    const res = await apiClient.post(`/stops/${stop.id}/start-delivery`)
+    if (res.data && res.data.status === 'success') {
+      stop.status = 'OUT_FOR_DELIVERY'
+    }
+  } catch (err) {
+    console.error(`Failed to start delivery for stop ${stop.id}:`, err)
+  }
+}
+
+const completeDelivery = async (stop: Stop) => {
+  try {
+    const res = await apiClient.post(`/stops/${stop.id}/complete-delivery`)
+    if (res.data && res.data.status === 'success') {
+      stop.status = 'DELIVERED'
+    }
+  } catch (err) {
+    console.error(`Failed to complete delivery for stop ${stop.id}:`, err)
+  }
+}
+
+const failDelivery = async (stop: Stop) => {
+  const reason = prompt('Please enter the failure reason:', 'Customer not available')
+  if (reason === null) return // User cancelled
+  
+  try {
+    const res = await apiClient.post(`/stops/${stop.id}/fail-delivery`, {
+      reason
+    })
+    if (res.data && res.data.status === 'success') {
+      stop.status = 'FAILED'
+      stop.failedReasonNotes = reason
+    }
+  } catch (err) {
+    console.error(`Failed to fail delivery for stop ${stop.id}:`, err)
+  }
+}
+
+interface MasterRoute {
+  routeId: string
+  routeCode: string
+  routeDate: string
+  driverName: string | null
+  stopsCount: number
+  status: string
+}
+const masterRoutes = ref<MasterRoute[]>([])
+
+const syncRoutesList = async () => {
+  try {
+    const routesRes = await apiClient.get('/routes?size=100')
+    if (routesRes.data && routesRes.data.status === 'success') {
+      const apiRoutes = routesRes.data.data?.content || routesRes.data.data || []
+      
+      let apiDrivers: any[] = []
+      try {
+        const drvRes = await apiClient.get('/drivers')
+        if (drvRes.data && drvRes.data.status === 'success') {
+          apiDrivers = drvRes.data.data || []
+        }
+      } catch (e) {
+        console.warn('Failed to load drivers for master list:', e)
+      }
+      
+      masterRoutes.value = await Promise.all(apiRoutes.map(async (route: any) => {
+        let stopsCount = 0
+        try {
+          const stopsRes = await apiClient.get(`/routes/${route.routeId}/stops?size=1`)
+          if (stopsRes.data && stopsRes.data.status === 'success') {
+            stopsCount = stopsRes.data.data?.totalElements || stopsRes.data.data?.length || 0
+          }
+        } catch (e) {
+          console.warn('Failed to get stops count for route:', route.routeId)
+        }
+        
+        const matchedDriver = apiDrivers.find(
+          (d: any) => d.driverId === route.driverId || d.employeeId === route.driverId
+        )
+        const driverName = matchedDriver ? `${matchedDriver.firstName} ${matchedDriver.lastName}` : null
+        
+        return {
+          routeId: route.routeId,
+          routeCode: route.routeCode,
+          routeDate: route.routeDate,
+          driverName,
+          stopsCount,
+          status: route.status
+        }
+      }))
+    }
+  } catch (err) {
+    console.error('Failed to sync master routes list:', err)
+  }
 }
 </script>
 
 <template>
-  <div class="dashboard-container">
-    <!-- Dispatcher Sidebar -->
-    <aside class="dashboard-sidebar">
-      <div class="sidebar-brand">
-        <div class="logo-box">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="brand-svg">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125a1.125 1.125 0 0 0 1.125-1.125V9.75M3.75 12h12.75M3 14.25h13.5m0 0V9.75M16.5 9.75V5.25A2.25 2.25 0 0 0 14.25 3H6.125A2.25 2.25 0 0 0 3.875 5.25V14.25m12.625-4.5h2.375A2.25 2.25 0 0 1 21 12v3.75m-2.25-5.25v2.25m-15-2.25h12" />
-          </svg>
-        </div>
-        <div class="brand-text">
-          <span class="brand-title">LAST-MILE</span>
-          <span class="brand-subtitle">DISPATCH CONSOLE</span>
-        </div>
+  <DashboardLayout>
+    <!-- Page title and Tab switcher section -->
+    <div class="page-title-section" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <h1>Logistics Terminal</h1>
+        <p class="subtitle">Real-time dispatch system monitoring, geocoding and corridor routing sequences</p>
       </div>
-
-      <!-- Dispatcher Identity Card -->
-      <div class="dispatcher-identity">
-        <div class="identity-avatar">
-          <span>{{ authStore.name ? authStore.name.slice(0, 2).toUpperCase() : 'DS' }}</span>
-        </div>
-        <div class="identity-details">
-          <h4 class="dsp-name">{{ authStore.name || 'Dispatcher' }}</h4>
-          <span class="dsp-badge">ID: {{ authStore.employeeId || 'EMP-1002' }}</span>
-          <span class="dsp-role">{{ authStore.role || 'DISPATCHER' }}</span>
-        </div>
-      </div>
-
-      <!-- Sidebar Navigation Menu -->
-      <nav class="sidebar-nav">
+      <!-- Tab Toggles -->
+      <div class="tabs-navigation-header" style="display: flex; gap: 8px; background-color: var(--color-gray-100); padding: 4px; border-radius: 8px; border: 1.5px solid var(--color-gray-200);">
         <button 
-          class="nav-btn" 
+          @click="currentTab = 'fleet'" 
           :class="{ active: currentTab === 'fleet' }" 
-          @click="currentTab = 'fleet'"
+          style="padding: 6px 14px; border: none; background: none; font-size: 12.5px; font-weight: 700; border-radius: 6px; cursor: pointer; color: var(--color-gray-500); transition: all 0.2s; font-family: var(--font-sans);"
+          class="header-tab-btn"
         >
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
-          </svg>
-          Overview
+          Summary Overview
         </button>
         <button 
-          class="nav-btn" 
+          @click="currentTab = 'planner'" 
           :class="{ active: currentTab === 'planner' }" 
-          @click="currentTab = 'planner'"
+          style="padding: 6px 14px; border: none; background: none; font-size: 12.5px; font-weight: 700; border-radius: 6px; cursor: pointer; color: var(--color-gray-500); transition: all 0.2s; font-family: var(--font-sans);"
+          class="header-tab-btn"
         >
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25zM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25z" />
-          </svg>
           Route & Load Planner
         </button>
-      </nav>
-
-      <!-- Sidebar Footer -->
-      <div class="sidebar-footer">
-        <div class="hub-info">
-          <span class="hub-label">ACTIVE NODE HUB</span>
-          <span class="hub-value">{{ authStore.hub || 'MLC-9 (MAIN)' }}</span>
-        </div>
-        
-        <button @click="handleLogout" class="btn-logout" aria-label="Sign Out">
-          <span>Sign Out Session</span>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="logout-icon">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
-          </svg>
-        </button>
       </div>
-    </aside>
-
-    <!-- Main Content Grid -->
-    <main class="dashboard-body">
-      <!-- Page title section -->
-      <div class="page-title-section">
-        <h1>Logistics Terminal</h1>
-        <p class="subtitle">Real-time dispatch system monitoring for {{ dashboardMetrics?.totalUsers || 2 }} terminal users, geocoding and corridor routing sequences</p>
-      </div>
+    </div>
 
       <!-- Quick Stats / KPI Cards (Dynamically computed from stops) -->
       <section class="stats-panel">
@@ -540,7 +829,17 @@ const publishRoutes = () => {
                   <tr v-for="driver in activeDrivers" :key="driver.id">
                     <td class="driver-id">{{ driver.id }}</td>
                     <td class="driver-name">{{ driver.name }}</td>
-                    <td class="driver-route">{{ driver.route }}</td>
+                    <td class="driver-route">
+                      <span 
+                        v-if="driver.routeCode" 
+                        class="route-badge-link" 
+                        @click="navigateToRoute(driver.routeId)"
+                        title="View Route Details"
+                      >
+                        {{ driver.routeCode }}
+                      </span>
+                      <span v-else class="not-assigned">Not Assigned</span>
+                    </td>
                     <td class="driver-stops">{{ getStopRatio(driver) }}</td>
                     <td>
                       <span class="status-pill" :class="driver.status.toLowerCase().replace(' ', '-')">
@@ -663,9 +962,36 @@ const publishRoutes = () => {
                     <span class="driver-lane-name">{{ driver.name }}</span>
                     <span class="driver-lane-id">{{ driver.id }}</span>
                   </div>
-                  <div class="lane-stats">
-                    <span class="route-badge">{{ driver.route }}</span>
+                  <div class="lane-stats" style="flex-wrap: wrap; gap: 4px;">
+                    <span 
+                      class="route-badge clickable" 
+                      v-if="driver.routeCode" 
+                      @click="navigateToRoute(driver.routeId)"
+                      title="View Route Details"
+                    >
+                      {{ driver.routeCode }}
+                    </span>
+                    <span class="route-status-pill" :class="driver.routeStatus?.toLowerCase()" v-if="driver.routeStatus">
+                      {{ driver.routeStatus }}
+                    </span>
                     <span class="stops-count">{{ driver.stopsList.length }} stops</span>
+                  </div>
+                  <div class="route-actions" v-if="driver.routeId">
+                    <button v-if="driver.routeStatus === 'DRAFT'" class="btn-route-action publish" @click.stop="publishRoute(driver)">
+                      Publish
+                    </button>
+                    <button v-if="driver.routeStatus === 'PUBLISHED'" class="btn-route-action activate" @click.stop="activateRoute(driver)">
+                      Activate
+                    </button>
+                    <button v-if="driver.routeStatus === 'PUBLISHED'" class="btn-route-action cancel" @click.stop="cancelRoute(driver)">
+                      Cancel
+                    </button>
+                    <button v-if="driver.routeStatus === 'ACTIVE'" class="btn-route-action complete" @click.stop="completeRoute(driver)">
+                      Complete
+                    </button>
+                    <button v-if="driver.routeStatus === 'ACTIVE'" class="btn-route-action cancel" @click.stop="cancelRoute(driver)">
+                      Cancel
+                    </button>
                   </div>
                 </div>
                 
@@ -679,8 +1005,8 @@ const publishRoutes = () => {
                     v-for="(stop, index) in driver.stopsList" 
                     :key="stop.id"
                     class="stop-card"
-                    :class="[stop.priority.toLowerCase(), { 'completed': stop.status === 'Completed' }]"
-                    :draggable="stop.status !== 'Completed'"
+                    :class="[stop.priority.toLowerCase(), { 'completed': stop.status === 'DELIVERED' || stop.status === 'FAILED' }]"
+                    :draggable="stop.status === 'PENDING' || stop.status === 'ROUTED'"
                     @dragstart="handleDragStart($event, stop.id, driver.id)"
                     @dragover.prevent
                     @drop="handleDrop($event, driver.id, stop.id)"
@@ -697,7 +1023,7 @@ const publishRoutes = () => {
                           </span>
                           <!-- Unassign Button -->
                           <button 
-                            v-if="stop.status !== 'Completed'"
+                            v-if="stop.status === 'ROUTED' || stop.status === 'PENDING'"
                             class="btn-unassign" 
                             @click.stop="unassignStop(stop.id, driver.id)"
                             title="Unassign Stop"
@@ -712,9 +1038,29 @@ const publishRoutes = () => {
                       <div class="stop-details">
                         <div class="cust-name">
                           {{ stop.customerName }}
-                          <span v-if="stop.status === 'Completed'" class="badge-done">Done</span>
+                          <span class="stop-status-badge" :class="stop.status.toLowerCase()">
+                            {{ stop.status.replace(/_/g, ' ') }}
+                          </span>
                         </div>
                         <div class="stop-address">{{ stop.address }}</div>
+                        <div v-if="stop.failedReasonNotes" class="fail-reason">
+                          Reason: {{ stop.failedReasonNotes }}
+                        </div>
+                      </div>
+                      
+                      <!-- Stop Actions inside Card -->
+                      <div class="stop-actions" v-if="driver.routeStatus === 'ACTIVE'">
+                        <button v-if="stop.status === 'ROUTED'" class="btn-stop-action start" @click.stop="startDelivery(stop)">
+                          Start Delivery
+                        </button>
+                        <div v-else-if="stop.status === 'OUT_FOR_DELIVERY'" class="stop-action-group">
+                          <button class="btn-stop-action complete" @click.stop="completeDelivery(stop)">
+                            Complete
+                          </button>
+                          <button class="btn-stop-action fail" @click.stop="failDelivery(stop)">
+                            Fail
+                          </button>
+                        </div>
                       </div>
                       
                       <div class="stop-card-footer">
@@ -734,10 +1080,64 @@ const publishRoutes = () => {
               </div>
             </div>
           </div>
-
         </div>
       </div>
-    </main>
+
+      <!-- Tab 3: Routes Master List -->
+      <div v-else-if="currentTab === 'routes'" class="tab-pane">
+        <section class="table-section">
+          <div class="card-header">
+            <h3>Registered Dispatch Routes</h3>
+            <button @click="syncRoutesList" class="btn-publish" style="padding: 6px 12px; font-size: 12px;">
+              Refresh Routes List
+            </button>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="fleet-table">
+              <thead>
+                <tr>
+                  <th>Route ID</th>
+                  <th>Route Code</th>
+                  <th>Route Date</th>
+                  <th>Assigned Driver</th>
+                  <th>Stops Assigned</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="route in masterRoutes" :key="route.routeId">
+                  <td class="driver-id">{{ route.routeId }}</td>
+                  <td class="driver-route">
+                    <span class="route-badge-link" @click="navigateToRoute(route.routeId)">
+                      {{ route.routeCode }}
+                    </span>
+                  </td>
+                  <td>{{ route.routeDate }}</td>
+                  <td class="driver-name">{{ route.driverName || 'Unassigned' }}</td>
+                  <td class="driver-stops">{{ route.stopsCount }} stops</td>
+                  <td>
+                    <span class="route-status-pill" :class="route.status.toLowerCase()">
+                      {{ route.status }}
+                    </span>
+                  </td>
+                  <td>
+                    <button @click="navigateToRoute(route.routeId)" class="btn-stop-action start" style="padding: 4px 10px;">
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="masterRoutes.length === 0">
+                  <td colspan="7" class="empty-profile" style="text-align: center; padding: 30px;">
+                    No routes currently registered on the server.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
 
     <!-- Success Staging Toast Notification -->
     <transition name="toast">
@@ -755,7 +1155,7 @@ const publishRoutes = () => {
         </div>
       </div>
     </transition>
-  </div>
+  </DashboardLayout>
 </template>
 
 <style scoped>
@@ -975,16 +1375,27 @@ const publishRoutes = () => {
   height: 16px;
 }
 
-/* Dashboard Body Layout */
-.dashboard-body {
-  padding: 40px;
-  margin-left: 260px;
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-  flex-grow: 1;
-  box-sizing: border-box;
-  width: calc(100% - 260px);
+/* Header tab toggle styles */
+.header-tab-btn {
+  border: none;
+  background: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--color-gray-500);
+  transition: all 0.2s;
+  font-family: var(--font-sans);
+}
+
+.header-tab-btn:hover {
+  color: var(--color-primary-dark);
+}
+
+.header-tab-btn.active {
+  background-color: var(--color-white) !important;
+  color: var(--color-primary-dark) !important;
+  box-shadow: var(--shadow-sm);
 }
 
 .page-title-section h1 {
@@ -1875,5 +2286,123 @@ const publishRoutes = () => {
   .driver-lanes-wrapper {
     grid-template-columns: 1fr;
   }
+}
+
+.route-status-pill {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+.route-status-pill.draft { background-color: #e2e8f0; color: #475569; }
+.route-status-pill.published { background-color: #dbeafe; color: #1e40af; }
+.route-status-pill.active { background-color: #dcfce7; color: #15803d; }
+.route-status-pill.completed { background-color: #f1f5f9; color: #64748b; }
+.route-status-pill.cancelled { background-color: #fee2e2; color: #991b1b; }
+
+.route-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.btn-route-action {
+  font-size: 10px;
+  font-weight: 700;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-sans);
+}
+.btn-route-action.publish { background-color: var(--color-primary); color: white; }
+.btn-route-action.activate { background-color: #16a34a; color: white; }
+.btn-route-action.cancel { background-color: #dc2626; color: white; }
+.btn-route-action.complete { background-color: #2563eb; color: white; }
+
+.btn-route-action:hover {
+  opacity: 0.9;
+  transform: translateY(-0.5px);
+}
+
+.stop-status-badge {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
+}
+.stop-status-badge.pending { background-color: #fef3c7; color: #d97706; }
+.stop-status-badge.routed { background-color: #dbeafe; color: #1e40af; }
+.stop-status-badge.out_for_delivery { background-color: #f3e8ff; color: #7e22ce; }
+.stop-status-badge.delivered { background-color: #dcfce7; color: #15803d; }
+.stop-status-badge.failed { background-color: #fee2e2; color: #b91c1c; }
+
+.fail-reason {
+  font-size: 10px;
+  color: var(--color-danger);
+  font-weight: 600;
+  margin-top: 4px;
+  background-color: rgba(239, 68, 68, 0.05);
+  padding: 4px 6px;
+  border-radius: 4px;
+  border-left: 2px solid var(--color-danger);
+}
+
+.stop-actions {
+  margin-top: 6px;
+  border-top: 1px solid var(--color-gray-100);
+  padding-top: 6px;
+}
+
+.stop-action-group {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-stop-action {
+  font-size: 9px;
+  font-weight: 700;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-sans);
+  flex-grow: 1;
+  text-align: center;
+}
+.btn-stop-action.start { background-color: #7e22ce; color: white; }
+.btn-stop-action.complete { background-color: #16a34a; color: white; }
+.btn-stop-action.fail { background-color: #dc2626; color: white; }
+
+.btn-stop-action:hover {
+  opacity: 0.9;
+  transform: translateY(-0.5px);
+}
+
+.route-badge-link {
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.route-badge-link:hover {
+  color: var(--color-primary-dark);
+}
+.route-badge.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.route-badge.clickable:hover {
+  background-color: var(--color-primary-dark);
+  color: var(--color-accent-sage);
 }
 </style>

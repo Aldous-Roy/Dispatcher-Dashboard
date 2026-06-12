@@ -3,6 +3,12 @@ import Login from '../components/auth/Login.vue'
 import SignUp from '../components/auth/SignUp.vue'
 import Dashboard from '../components/dashboard/Dashboard.vue'
 import ManagerDashboard from '../components/dashboard/ManagerDashboard.vue'
+import RouteDetails from '../components/dashboard/RouteDetails.vue'
+import Users from '../components/dashboard/Users.vue'
+import Drivers from '../components/dashboard/Drivers.vue'
+import RoutesList from '../components/dashboard/Routes.vue'
+import Stops from '../components/dashboard/Stops.vue'
+import Tracking from '../components/dashboard/Tracking.vue'
 import { useAuthStore } from '../stores/auth'
 
 const routes = [
@@ -32,13 +38,55 @@ const routes = [
     path: '/dashboard',
     name: 'Dashboard',
     component: Dashboard,
-    meta: { requiresAuth: true, requiredRole: 'DISPATCHER' }
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
   },
   {
     path: '/manager/dashboard',
     name: 'ManagerDashboard',
     component: ManagerDashboard,
     meta: { requiresAuth: true, requiredRole: ['FLEET_MANAGER', 'ADMIN'] }
+  },
+  {
+    path: '/users',
+    name: 'Users',
+    component: Users,
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
+  },
+  {
+    path: '/drivers',
+    name: 'Drivers',
+    component: Drivers,
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
+  },
+  {
+    path: '/drivers/:driverId',
+    name: 'DriverDetails',
+    component: Drivers,
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
+  },
+  {
+    path: '/routes',
+    name: 'Routes',
+    component: RoutesList,
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
+  },
+  {
+    path: '/routes/:id',
+    name: 'RouteDetails',
+    component: RouteDetails,
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
+  },
+  {
+    path: '/stops',
+    name: 'Stops',
+    component: Stops,
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
+  },
+  {
+    path: '/tracking',
+    name: 'Tracking',
+    component: Tracking,
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
   },
   {
     path: '/:pathMatch(.*)*',

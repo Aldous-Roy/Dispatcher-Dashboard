@@ -38,130 +38,89 @@ interface Driver {
   stopsList: Stop[]
 }
 
-// Fallback / Seed Driver Fleet State
-const fallbackDrivers: Driver[] = [
-  { 
-    id: 'DRV-101', 
-    name: 'Rajesh Kumar', 
-    route: 'DEL-NCR-01', 
-    status: 'Active', 
-    phone: '+91 98765 43210',
-    stopsList: [
-      { id: 'STP-1001', address: 'Connaught Place, Block E, New Delhi', customerName: 'Reliance Retail', packageCount: 4, priority: 'High', latitude: 28.6304, longitude: 77.2177, geocoding: false, status: 'Completed' },
-      { id: 'STP-1002', address: 'Sector 62, Noida, Uttar Pradesh', customerName: 'Tata Consultancy Services', packageCount: 2, priority: 'Medium', latitude: 28.6289, longitude: 77.3621, geocoding: false, status: 'Pending' },
-      { id: 'STP-1003', address: 'Indirapuram, Ghaziabad, Uttar Pradesh', customerName: 'Infosys office', packageCount: 1, priority: 'Low', latitude: 28.6354, longitude: 77.3736, geocoding: false, status: 'Pending' }
-    ]
-  },
-  { 
-    id: 'DRV-104', 
-    name: 'Amit Sharma', 
-    route: 'MUM-WST-04', 
-    status: 'Completed', 
-    phone: '+91 87654 32109',
-    stopsList: [
-      { id: 'STP-2001', address: 'Bandra Kurla Complex, Bandra East, Mumbai', customerName: 'HDFC Bank Towers', packageCount: 10, priority: 'High', latitude: 19.0596, longitude: 72.8631, geocoding: false, status: 'Completed' },
-      { id: 'STP-2002', address: 'Link Road, Andheri West, Mumbai', customerName: 'Sharma Logistics', packageCount: 1, priority: 'Low', latitude: 19.1363, longitude: 72.8293, geocoding: false, status: 'Completed' }
-    ]
-  },
-  { 
-    id: 'DRV-208', 
-    name: 'Priya Patel', 
-    route: 'BLR-OUT-02', 
-    status: 'On Break', 
-    phone: '+91 76543 21098',
-    stopsList: [
-      { id: 'STP-3001', address: 'Indiranagar 100 Feet Rd, Bengaluru, Karnataka', customerName: 'Flipkart HQ', packageCount: 3, priority: 'Medium', latitude: 12.9719, longitude: 77.6412, geocoding: false, status: 'Pending' },
-      { id: 'STP-3002', address: 'Whitefield Main Rd, Bengaluru, Karnataka', customerName: 'Patel Enterprises', packageCount: 2, priority: 'Low', latitude: 12.9698, longitude: 77.7499, geocoding: false, status: 'Pending' }
-    ]
-  },
-  { 
-    id: 'DRV-309', 
-    name: 'Vikram Singh', 
-    route: 'HYD-MTR-09', 
-    status: 'Active', 
-    phone: '+91 91234 56789',
-    stopsList: [
-      { id: 'STP-4001', address: 'Hitec City, Madhapur, Hyderabad, Telangana', customerName: 'Wipro Campus', packageCount: 5, priority: 'High', latitude: 17.4483, longitude: 78.3741, geocoding: false, status: 'Completed' },
-      { id: 'STP-4002', address: 'DLF Cyber City, Gachibowli, Hyderabad, Telangana', customerName: 'Singh Traders', packageCount: 3, priority: 'Medium', latitude: 17.4442, longitude: 78.3488, geocoding: false, status: 'Pending' },
-      { id: 'STP-4003', address: 'Jubilee Hills Rd No 36, Hyderabad, Telangana', customerName: 'Apollo Pharmacy', packageCount: 1, priority: 'Low', latitude: 17.4325, longitude: 78.4069, geocoding: false, status: 'Pending' }
-    ]
-  }
-]
-
 // Active Reactive Driver State loaded dynamically
 const activeDrivers = ref<Driver[]>([])
+
+interface DashboardData {
+  totalUsers: number
+  totalDrivers: number
+  activeDrivers: number
+  totalRoutes: number
+  routesByStatus: {
+    DRAFT: number
+    PUBLISHED: number
+    ACTIVE: number
+    COMPLETED: number
+    CANCELLED: number
+  }
+  ordersByStatus: {
+    PENDING: number
+    ROUTED: number
+    OUT_FOR_DELIVERY: number
+    DELIVERED: number
+    FAILED: number
+  }
+  deliveredToday: number
+  pendingPods: number
+}
+
+const dashboardMetrics = ref<DashboardData | null>(null)
+
+const loadDashboardMetrics = async () => {
+  try {
+    const response = await apiClient.get('/dashboard/summary')
+    if (response.data && response.data.status === 'success') {
+      dashboardMetrics.value = response.data.data
+    }
+  } catch (err) {
+    console.warn('Failed to load dashboard metrics from API:', err)
+  }
+}
 
 const loadAndSeedDrivers = async () => {
   try {
     const response = await apiClient.get('/drivers')
     if (response.data && response.data.status === 'success') {
       const apiDrivers = response.data.data || []
-      
-      if (apiDrivers.length === 0) {
-        console.info('API returned 0 drivers. Seeding default drivers to cloud backend...')
-        // Seed default drivers to backend
-        for (const driver of fallbackDrivers) {
-          const names = driver.name.split(' ')
-          const firstName = names[0] || 'Driver'
-          const lastName = names.slice(1).join(' ') || 'User'
-          
-          try {
-            await apiClient.post('/drivers', {
-              firstName,
-              lastName,
-              phoneNumber: driver.phone.replace('+91 ', '').replace(/\s+/g, ''),
-              maxPackageCapacity: 50,
-              maxWeightCapacityKg: 300.00,
-              active: true
-            })
-          } catch (seedErr) {
-            console.error(`Failed to seed driver ${driver.name}:`, seedErr)
-          }
-        }
-        
-        // Fetch list again after seeding
-        const secondResponse = await apiClient.get('/drivers')
-        if (secondResponse.data && secondResponse.data.status === 'success') {
-          mapApiDrivers(secondResponse.data.data || [])
-          return
-        }
-      } else {
-        mapApiDrivers(apiDrivers)
-        return
-      }
+      mapApiDrivers(apiDrivers)
     }
   } catch (err) {
-    console.warn('API call failed, falling back to mock drivers:', err)
+    console.warn('API call failed to load drivers:', err)
   }
-  
-  // Fallback if everything else fails
-  activeDrivers.value = JSON.parse(JSON.stringify(fallbackDrivers))
 }
 
 const mapApiDrivers = (apiDrivers: any[]) => {
-  activeDrivers.value = apiDrivers.map(apiDriver => {
+  const routes = ['DEL-NCR-01', 'MUM-WST-04', 'BLR-OUT-02', 'HYD-MTR-09', 'DEL-SOUTH-02', 'BLR-EC-05']
+  activeDrivers.value = apiDrivers.map((apiDriver, index) => {
     const fullName = `${apiDriver.firstName} ${apiDriver.lastName}`
-    const existing = fallbackDrivers.find(d => d.name === fullName || d.id === apiDriver.employeeId)
-    
     return {
-      id: apiDriver.employeeId || apiDriver.driverId,
+      id: apiDriver.employeeId || `DRV-${apiDriver.driverId}`,
       name: fullName,
-      route: existing?.route || 'DEL-NCR-01',
-      status: apiDriver.active ? (existing?.status || 'Active') : 'Inactive',
-      phone: apiDriver.phoneNumber ? `+91 ${apiDriver.phoneNumber}` : (existing?.phone || '+91 99999 99999'),
-      stopsList: existing?.stopsList || []
+      route: routes[index % routes.length],
+      status: apiDriver.active ? 'Active' : 'Inactive',
+      phone: apiDriver.phoneNumber ? `+91 ${apiDriver.phoneNumber}` : '+91 99999 99999',
+      stopsList: []
     }
   })
 }
 
 onMounted(() => {
   loadAndSeedDrivers()
+  loadDashboardMetrics()
 })
 
 // DYNAMIC STATS COMPUTATIONS
-const activeDriversCount = computed(() => activeDrivers.value.length)
+const activeDriversCount = computed(() => {
+  if (dashboardMetrics.value) {
+    return dashboardMetrics.value.totalDrivers
+  }
+  return activeDrivers.value.length
+})
 
 const activeFleetsCount = computed(() => {
+  if (dashboardMetrics.value) {
+    return dashboardMetrics.value.activeDrivers
+  }
   // Counts drivers that have active (pending) stops assigned and are not marked complete
   return activeDrivers.value.filter(d => 
     d.stopsList.some(s => s.status === 'Pending') && d.status !== 'Completed'
@@ -169,17 +128,27 @@ const activeFleetsCount = computed(() => {
 })
 
 const totalCompletedStops = computed(() => {
+  if (dashboardMetrics.value) {
+    return dashboardMetrics.value.deliveredToday
+  }
   return activeDrivers.value.reduce((acc, d) => 
     acc + d.stopsList.filter(s => s.status === 'Completed').length, 0
   )
 })
 
 const totalStopsCount = computed(() => {
+  if (dashboardMetrics.value) {
+    const obs = dashboardMetrics.value.ordersByStatus
+    return obs.PENDING + obs.ROUTED + obs.OUT_FOR_DELIVERY + obs.DELIVERED + obs.FAILED
+  }
   const driverStops = activeDrivers.value.reduce((acc, d) => acc + d.stopsList.length, 0)
   return driverStops + pendingStops.value.length
 })
 
 const pendingExceptionsCount = computed(() => {
+  if (dashboardMetrics.value) {
+    return dashboardMetrics.value.pendingPods
+  }
   // Count High priority stops that are unassigned (pending) or assigned but not completed
   const pendingHigh = pendingStops.value.filter(s => s.priority === 'High').length
   const driverHigh = activeDrivers.value.reduce((acc, d) => 
@@ -187,6 +156,45 @@ const pendingExceptionsCount = computed(() => {
   )
   return pendingHigh + driverHigh
 })
+
+const routeStatusMap = computed(() => {
+  if (dashboardMetrics.value) {
+    return dashboardMetrics.value.routesByStatus
+  }
+  return {
+    DRAFT: 0,
+    PUBLISHED: 0,
+    ACTIVE: 0,
+    COMPLETED: 0,
+    CANCELLED: 0
+  }
+})
+
+const orderStatusMap = computed(() => {
+  if (dashboardMetrics.value) {
+    return dashboardMetrics.value.ordersByStatus
+  }
+  return {
+    PENDING: 0,
+    ROUTED: 0,
+    OUT_FOR_DELIVERY: 0,
+    DELIVERED: 0,
+    FAILED: 0
+  }
+})
+
+const totalOrders = computed(() => {
+  if (dashboardMetrics.value) {
+    const obs = dashboardMetrics.value.ordersByStatus
+    return obs.PENDING + obs.ROUTED + obs.OUT_FOR_DELIVERY + obs.DELIVERED + obs.FAILED
+  }
+  return 0
+})
+
+const getPercentage = (count: number, total: number) => {
+  if (total === 0) return 0
+  return Math.round((count / total) * 100)
+}
 
 // Dynamic Stops Done Fraction for the Overview Table
 const getStopRatio = (driver: typeof activeDrivers.value[0]) => {
@@ -203,6 +211,7 @@ const handleLogout = () => {
 
 // CSV IMPORT & SIMULATED GEOCODING
 const handleStopsLoaded = (loadedStops: ParsedStop[]) => {
+  dashboardMetrics.value = null // Switch to dynamic client-side calculations
   const stopsWithStatus = loadedStops.map(s => ({
     ...s,
     status: 'Pending' as const
@@ -265,6 +274,7 @@ const handleDrop = (e: DragEvent, toLane: string, targetStopId?: string) => {
 
 // Shift stops logic supporting inter-lane move and intra-lane sequence reordering
 const moveStop = (stopId: string, fromLane: string, toLane: string, targetStopId?: string) => {
+  dashboardMetrics.value = null // Switch to dynamic client-side calculations
   let stopObj: Stop | undefined
 
   // 1. Extract from origin lane
@@ -321,6 +331,7 @@ const moveStop = (stopId: string, fromLane: string, toLane: string, targetStopId
 
 // Unassign / remove stop action trigger button
 const unassignStop = (stopId: string, driverId: string) => {
+  dashboardMetrics.value = null // Switch to dynamic client-side calculations
   const driver = activeDrivers.value.find(d => d.id === driverId)
   if (!driver) return
   
@@ -338,6 +349,7 @@ const publishRoutes = () => {
   setTimeout(() => {
     isPublishing.value = false
     showPublishSuccess.value = true
+    loadDashboardMetrics() // Refresh metrics from API
     // Dismiss toast after delay
     setTimeout(() => {
       showPublishSuccess.value = false
@@ -348,63 +360,78 @@ const publishRoutes = () => {
 
 <template>
   <div class="dashboard-container">
-    <!-- Top Navigation Header -->
-    <header class="dashboard-header">
-      <div class="brand">
+    <!-- Dispatcher Sidebar -->
+    <aside class="dashboard-sidebar">
+      <div class="sidebar-brand">
         <div class="logo-box">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="brand-svg">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125a1.125 1.125 0 0 0 1.125-1.125V9.75M3.75 12h12.75M3 14.25h13.5m0 0V9.75M16.5 9.75V5.25A2.25 2.25 0 0 0 14.25 3H6.125A2.25 2.25 0 0 0 3.875 5.25V14.25m12.625-4.5h2.375A2.25 2.25 0 0 1 21 12v3.75m-2.25-5.25v2.25m-15-2.25h12" />
           </svg>
         </div>
-        <span class="brand-name">LAST-MILE CONSOLE</span>
+        <div class="brand-text">
+          <span class="brand-title">LAST-MILE</span>
+          <span class="brand-subtitle">DISPATCH CONSOLE</span>
+        </div>
       </div>
 
-      <div class="user-controls">
-        <div class="user-badge">
-          <span class="pulse-dot"></span>
-          <span class="role">{{ authStore.role || 'DISPATCHER' }}:</span>
-          <span class="username">{{ authStore.name || 'Admin' }}</span>
+      <!-- Dispatcher Identity Card -->
+      <div class="dispatcher-identity">
+        <div class="identity-avatar">
+          <span>{{ authStore.name ? authStore.name.slice(0, 2).toUpperCase() : 'DS' }}</span>
+        </div>
+        <div class="identity-details">
+          <h4 class="dsp-name">{{ authStore.name || 'Dispatcher' }}</h4>
+          <span class="dsp-badge">ID: {{ authStore.employeeId || 'EMP-1002' }}</span>
+          <span class="dsp-role">{{ authStore.role || 'DISPATCHER' }}</span>
+        </div>
+      </div>
+
+      <!-- Sidebar Navigation Menu -->
+      <nav class="sidebar-nav">
+        <button 
+          class="nav-btn" 
+          :class="{ active: currentTab === 'fleet' }" 
+          @click="currentTab = 'fleet'"
+        >
+          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
+          </svg>
+          Overview
+        </button>
+        <button 
+          class="nav-btn" 
+          :class="{ active: currentTab === 'planner' }" 
+          @click="currentTab = 'planner'"
+        >
+          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25zM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25z" />
+          </svg>
+          Route & Load Planner
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <div class="hub-info">
+          <span class="hub-label">ACTIVE NODE HUB</span>
+          <span class="hub-value">{{ authStore.hub || 'MLC-9 (MAIN)' }}</span>
         </div>
         
         <button @click="handleLogout" class="btn-logout" aria-label="Sign Out">
-          <span>Sign Out</span>
+          <span>Sign Out Session</span>
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="logout-icon">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
           </svg>
         </button>
       </div>
-    </header>
+    </aside>
 
     <!-- Main Content Grid -->
     <main class="dashboard-body">
       <!-- Page title section -->
       <div class="page-title-section">
         <h1>Logistics Terminal</h1>
-        <p class="subtitle">Real-time dispatch system monitoring, geocoding and corridor routing sequences</p>
-      </div>
-
-      <!-- Segmented Navigation Tabs -->
-      <div class="tabs-container">
-        <button 
-          class="tab-btn" 
-          :class="{ active: currentTab === 'fleet' }" 
-          @click="currentTab = 'fleet'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
-          </svg>
-          Active Fleet Overview
-        </button>
-        <button 
-          class="tab-btn" 
-          :class="{ active: currentTab === 'planner' }" 
-          @click="currentTab = 'planner'"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25zM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25z" />
-          </svg>
-          Route & Load Planner
-        </button>
+        <p class="subtitle">Real-time dispatch system monitoring for {{ dashboardMetrics?.totalUsers || 2 }} terminal users, geocoding and corridor routing sequences</p>
       </div>
 
       <!-- Quick Stats / KPI Cards (Dynamically computed from stops) -->
@@ -452,42 +479,82 @@ const publishRoutes = () => {
       
       <!-- Tab 1: Original Fleet Console Overview -->
       <div v-if="currentTab === 'fleet'" class="tab-pane">
-        <section class="table-section">
-          <div class="card-header">
-            <h3>Active Driver Terminals</h3>
-            <span class="badge-live">LIVE UPDATES ACTIVE</span>
-          </div>
+        <div class="analytics-grid">
+          <!-- Route & Order Analytics Panel -->
+          <section class="analytics-panel">
+            <div class="card-header">
+              <h3>Operational Summary</h3>
+              <span class="badge-live">LIVE STATUS</span>
+            </div>
+            <div class="analytics-content">
+              <!-- Route Status Breakdown -->
+              <div class="analytics-block">
+                <h4>Routes Distribution (Total: {{ dashboardMetrics?.totalRoutes || 0 }})</h4>
+                <div class="status-bars">
+                  <div v-for="(count, status) in routeStatusMap" :key="status" class="status-bar-row">
+                    <span class="status-label">{{ status }}</span>
+                    <div class="progress-track">
+                      <div class="progress-fill" :class="status.toLowerCase()" :style="{ width: getPercentage(count, dashboardMetrics?.totalRoutes || 0) + '%' }"></div>
+                    </div>
+                    <span class="status-count">{{ count }}</span>
+                  </div>
+                </div>
+              </div>
 
-          <div class="table-wrapper">
-            <table class="fleet-table">
-              <thead>
-                <tr>
-                  <th>Driver ID</th>
-                  <th>Name</th>
-                  <th>Assigned Corridor</th>
-                  <th>Stops Done</th>
-                  <th>Operational Status</th>
-                  <th>Contact</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="driver in activeDrivers" :key="driver.id">
-                  <td class="driver-id">{{ driver.id }}</td>
-                  <td class="driver-name">{{ driver.name }}</td>
-                  <td class="driver-route">{{ driver.route }}</td>
-                  <td class="driver-stops">{{ getStopRatio(driver) }}</td>
-                  <td>
-                    <span class="status-pill" :class="driver.status.toLowerCase().replace(' ', '-')">
-                      <span class="dot"></span>
-                      {{ driver.status }}
-                    </span>
-                  </td>
-                  <td class="driver-phone">{{ driver.phone }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+              <!-- Order Status Breakdown -->
+              <div class="analytics-block">
+                <h4>Orders Breakdown (Total: {{ totalOrders }})</h4>
+                <div class="status-bars">
+                  <div v-for="(count, status) in orderStatusMap" :key="status" class="status-bar-row">
+                    <span class="status-label">{{ status.replace(/_/g, ' ') }}</span>
+                    <div class="progress-track">
+                      <div class="progress-fill" :class="status.toLowerCase()" :style="{ width: getPercentage(count, totalOrders) + '%' }"></div>
+                    </div>
+                    <span class="status-count">{{ count }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Active Driver Terminals Table -->
+          <section class="table-section">
+            <div class="card-header">
+              <h3>Active Driver Terminals</h3>
+              <span class="badge-live">LIVE UPDATES ACTIVE</span>
+            </div>
+
+            <div class="table-wrapper">
+              <table class="fleet-table">
+                <thead>
+                  <tr>
+                    <th>Driver ID</th>
+                    <th>Name</th>
+                    <th>Assigned Corridor</th>
+                    <th>Stops Done</th>
+                    <th>Operational Status</th>
+                    <th>Contact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="driver in activeDrivers" :key="driver.id">
+                    <td class="driver-id">{{ driver.id }}</td>
+                    <td class="driver-name">{{ driver.name }}</td>
+                    <td class="driver-route">{{ driver.route }}</td>
+                    <td class="driver-stops">{{ getStopRatio(driver) }}</td>
+                    <td>
+                      <span class="status-pill" :class="driver.status.toLowerCase().replace(' ', '-')">
+                        <span class="dot"></span>
+                        {{ driver.status }}
+                      </span>
+                    </td>
+                    <td class="driver-phone">{{ driver.phone }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
 
       <!-- Tab 2: Route & Load Planner (Draggable Lanes & CSV Upload) -->
@@ -697,25 +764,29 @@ const publishRoutes = () => {
   min-height: 100vh;
   background-color: var(--color-bg-base);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
 }
 
-/* Header Styling */
-.dashboard-header {
+/* Sidebar Styling */
+.dashboard-sidebar {
+  width: 260px;
   background-color: var(--color-primary-dark);
-  color: var(--color-bg-base);
-  padding: 16px 32px;
+  border-right: 1px solid var(--color-accent-sage);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: var(--shadow-md);
-  border-bottom: 2px solid var(--color-accent-sage);
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  padding: 24px 16px;
 }
 
-.brand {
+.sidebar-brand {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-bottom: 32px;
 }
 
 .logo-box {
@@ -734,73 +805,169 @@ const publishRoutes = () => {
   height: 20px;
 }
 
-.brand-name {
+.brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-title {
+  font-weight: 800;
   font-size: 16px;
-  font-weight: 700;
   letter-spacing: 1.5px;
+  color: var(--color-white);
 }
 
-.user-controls {
+.brand-subtitle {
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: var(--color-accent-sage);
+  font-weight: 700;
+}
+
+/* Dispatcher Identity Profile card */
+.dispatcher-identity {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
+  padding: 16px;
+  background-color: rgba(48, 109, 41, 0.3);
+  border: 1px solid rgba(231, 225, 177, 0.2);
+  border-radius: 12px;
+  margin-bottom: 28px;
 }
 
-.user-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background-color: rgba(231, 225, 177, 0.15);
-  border: 1px solid rgba(231, 225, 177, 0.25);
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 13.5px;
-}
-
-.pulse-dot {
-  width: 6px;
-  height: 6px;
-  background-color: #10b981;
+.identity-avatar {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
-  animation: pulseIndicator 2s infinite;
+  background-color: var(--color-accent-sage);
+  color: var(--color-primary-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
 }
 
-@keyframes pulseIndicator {
-  0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-  70% { transform: scale(1.1); opacity: 0.5; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(1); opacity: 0; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+.identity-details {
+  display: flex;
+  flex-direction: column;
 }
 
-.user-badge .role {
+.dsp-name {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-white);
+}
+
+.dsp-badge {
+  font-size: 10.5px;
+  color: var(--color-accent-sage);
+  font-family: monospace;
+}
+
+.dsp-role {
+  font-size: 10px;
   color: var(--color-accent-sage);
   font-weight: 600;
+  text-transform: uppercase;
 }
 
-.user-badge .username {
-  color: var(--color-white);
-  font-weight: 700;
+/* Sidebar Nav Navigation */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
 }
 
-.btn-logout {
-  background: none;
-  border: 1.5px solid var(--color-accent-sage);
-  color: var(--color-accent-sage);
-  padding: 6px 14px;
+.nav-btn {
+  width: 100%;
+  padding: 12px 14px;
   border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--color-accent-sage);
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  text-align: left;
+  transition: all 0.2s;
   font-family: var(--font-sans);
-  font-size: 13.5px;
+}
+
+.nav-btn:hover {
+  background-color: rgba(231, 225, 177, 0.1);
+  color: var(--color-white);
+}
+
+.nav-btn.active {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--color-white);
+  border-left: 3px solid var(--color-accent-sage);
+  padding-left: 11px;
+}
+
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Sidebar Footer */
+.sidebar-footer {
+  padding-top: 16px;
+  border-top: 1px solid rgba(231, 225, 177, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hub-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.hub-label {
+  font-size: 9px;
+  color: var(--color-accent-sage);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.hub-value {
+  font-size: 11.5px;
+  color: var(--color-white);
   font-weight: 600;
-  transition: all 0.25s;
+}
+
+.btn-logout {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background-color: rgba(239, 68, 68, 0.05);
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  font-family: var(--font-sans);
 }
 
 .btn-logout:hover {
-  background-color: var(--color-accent-sage);
-  color: var(--color-primary-dark);
+  background-color: #b91c1c;
+  color: #ffffff;
+  border-color: #b91c1c;
 }
 
 .logout-icon {
@@ -811,13 +978,13 @@ const publishRoutes = () => {
 /* Dashboard Body Layout */
 .dashboard-body {
   padding: 40px;
-  max-width: 1280px;
-  width: 100%;
-  margin: 0 auto;
+  margin-left: 260px;
   display: flex;
   flex-direction: column;
   gap: 32px;
   flex-grow: 1;
+  box-sizing: border-box;
+  width: calc(100% - 260px);
 }
 
 .page-title-section h1 {
@@ -832,43 +999,101 @@ const publishRoutes = () => {
   font-size: 15px;
 }
 
-/* Tabs Container */
-.tabs-container {
-  display: flex;
-  gap: 12px;
-  border-bottom: 2px solid var(--color-gray-200);
-  padding-bottom: 4px;
+/* Analytics Layout */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 24px;
+  align-items: flex-start;
 }
 
-.tab-btn {
-  background: none;
-  border: none;
-  padding: 10px 20px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--color-gray-500);
-  cursor: pointer;
-  border-radius: 8px;
+@media (max-width: 1024px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analytics-panel {
+  background-color: var(--color-white);
+  border: 1px solid var(--color-gray-200);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.analytics-content {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.analytics-block h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin-bottom: 12px;
+  letter-spacing: 0.25px;
+  text-transform: uppercase;
+}
+
+.status-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.status-bar-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: all 0.25s ease;
+  gap: 12px;
 }
 
-.tab-btn:hover {
-  color: var(--color-primary);
+.status-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--color-gray-500);
+  width: 110px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.progress-track {
+  flex-grow: 1;
+  height: 8px;
   background-color: var(--color-gray-100);
+  border-radius: 4px;
+  overflow: hidden;
 }
 
-.tab-btn.active {
-  color: var(--color-white);
-  background-color: var(--color-primary);
-  box-shadow: var(--shadow-sm);
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
 }
 
-.tab-btn svg {
-  width: 18px;
-  height: 18px;
+/* Route colors */
+.progress-fill.draft { background-color: var(--color-gray-400); }
+.progress-fill.published { background-color: var(--color-primary); }
+.progress-fill.active { background-color: #3b82f6; }
+.progress-fill.completed { background-color: var(--color-success); }
+.progress-fill.cancelled { background-color: var(--color-danger); }
+
+/* Order colors */
+.progress-fill.pending { background-color: #d97706; }
+.progress-fill.routed { background-color: #3b82f6; }
+.progress-fill.out_for_delivery { background-color: #8b5cf6; }
+.progress-fill.delivered { background-color: var(--color-success); }
+.progress-fill.failed { background-color: var(--color-danger); }
+
+.status-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-gray-800);
+  min-width: 20px;
+  text-align: right;
 }
 
 /* Stats panel */
@@ -1605,47 +1830,48 @@ const publishRoutes = () => {
 
 /* Mobile Responsiveness Updates */
 @media (max-width: 1024px) {
+  .dashboard-sidebar {
+    width: 200px;
+    padding: 16px 10px;
+  }
+  .dashboard-body {
+    margin-left: 200px;
+    width: calc(100% - 200px);
+    padding: 24px;
+  }
   .planner-layout {
     flex-direction: column;
     align-items: stretch;
   }
-  
   .planner-sidebar {
     width: 100%;
   }
-  
   .stops-scrollable {
     max-height: 300px;
   }
 }
 
 @media (max-width: 768px) {
-  .dashboard-header {
+  .dashboard-container {
+    flex-direction: column;
+  }
+  .dashboard-sidebar {
+    position: relative;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--color-accent-sage);
+    height: auto;
     padding: 16px;
   }
-  
-  .user-controls {
-    gap: 10px;
-  }
-  
-  .user-badge {
-    padding: 4px 8px;
-    font-size: 12px;
-  }
-  
-  .user-badge .role {
-    display: none;
-  }
-  
   .dashboard-body {
+    margin-left: 0;
+    width: 100%;
     padding: 20px;
     gap: 20px;
   }
-  
   .page-title-section h1 {
     font-size: 28px;
   }
-  
   .driver-lanes-wrapper {
     grid-template-columns: 1fr;
   }

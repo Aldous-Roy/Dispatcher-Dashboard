@@ -55,7 +55,7 @@ const dragStopId = ref<string | null>(null)
 
 const loadAvailableDrivers = async () => {
   try {
-    const res = await apiClient.get('/drivers')
+    const res = await apiClient.get('/drivers', { params: { page: 0, size: 100 } })
     if (res.data && res.data.status === 'success') {
       const allDrivers = res.data.data?.content || res.data.data || []
       availableDrivers.value = allDrivers
@@ -156,7 +156,7 @@ const assignOrders = async (orderId: string) => {
 }
 
 const handleDragStart = (event: DragEvent, stopId: string) => {
-  if (routeData.value?.status !== 'DRAFT') return
+  if (routeData.value?.status !== 'DRAFT' && routeData.value?.status !== 'PUBLISHED' && routeData.value?.status !== 'ASSIGNED') return
   dragStopId.value = stopId
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
@@ -165,7 +165,7 @@ const handleDragStart = (event: DragEvent, stopId: string) => {
 }
 
 const handleDrop = async (_event: DragEvent, targetStopId: string) => {
-  if (routeData.value?.status !== 'DRAFT' || !dragStopId.value) return
+  if ((routeData.value?.status !== 'DRAFT' && routeData.value?.status !== 'PUBLISHED' && routeData.value?.status !== 'ASSIGNED') || !dragStopId.value) return
   const stopId = dragStopId.value
   dragStopId.value = null
 
@@ -227,7 +227,7 @@ const fetchRouteDetails = async () => {
     // 3. Fetch driver details if driverId is set
     if (routeData.value?.driverId) {
       try {
-        const driversRes = await apiClient.get('/drivers')
+        const driversRes = await apiClient.get('/drivers', { params: { page: 0, size: 100 } })
         if (driversRes.data && driversRes.data.status === 'success') {
           const allDrivers = driversRes.data.data?.content || driversRes.data.data || []
           const matchedDriver = allDrivers.find(
@@ -250,7 +250,7 @@ const fetchRouteDetails = async () => {
     error.value = err.message || 'Error loading route details'
   } finally {
     loading.value = false
-    if (routeData.value?.status === 'DRAFT' || routeData.value?.status === 'PUBLISHED') {
+    if (routeData.value?.status === 'DRAFT' || routeData.value?.status === 'PUBLISHED' || routeData.value?.status === 'ASSIGNED') {
       loadAvailableDrivers()
       loadUnassignedStops()
     }
@@ -472,7 +472,7 @@ onMounted(() => {
               <span class="contact-num">📞 {{ driver.phone }}</span>
             </div>
           </div>
-          <div v-if="(routeData?.status === 'DRAFT' || routeData?.status === 'PUBLISHED')" class="driver-assign-box" style="padding: 16px; border-top: 1px solid var(--color-gray-100);">
+          <div v-if="(routeData?.status === 'DRAFT' || routeData?.status === 'PUBLISHED' || routeData?.status === 'ASSIGNED')" class="driver-assign-box" style="padding: 16px; border-top: 1px solid var(--color-gray-100);">
             <label style="font-size: 11px; font-weight: 700; color: var(--color-gray-500); display: block; margin-bottom: 6px; text-transform: uppercase;">
               Change/Assign Operator
             </label>
@@ -605,8 +605,8 @@ onMounted(() => {
               v-for="stop in stopPoints" 
               :key="stop.id" 
               class="timeline-item"
-              :class="[stop.priority.toLowerCase(), stop.status.toLowerCase(), { 'draggable-item': routeData?.status === 'DRAFT' }]"
-              :draggable="routeData?.status === 'DRAFT'"
+              :class="[stop.priority.toLowerCase(), stop.status.toLowerCase(), { 'draggable-item': routeData?.status === 'DRAFT' || routeData?.status === 'PUBLISHED' || routeData?.status === 'ASSIGNED' }]"
+              :draggable="routeData?.status === 'DRAFT' || routeData?.status === 'PUBLISHED' || routeData?.status === 'ASSIGNED'"
               @dragstart="handleDragStart($event, stop.id)"
               @dragover.prevent
               @drop="handleDrop($event, stop.id)"

@@ -98,10 +98,13 @@ const openAssignDrawer = async (routeId: string) => {
   assigningRouteId.value = routeId
   selectedDriverId.value = ''
   assignError.value = null
+  availableDrivers.value = []
   showAssignDrawer.value = true
   
   try {
-    const res = await apiClient.get('/drivers')
+    const res = await apiClient.get('/drivers', {
+      params: { page: 0, size: 100 }
+    })
     if (res.data && res.data.status === 'success') {
       const allDrivers = res.data.data?.content || res.data.data || []
       availableDrivers.value = allDrivers.filter((d: any) => d.active)
@@ -341,6 +344,9 @@ const viewDetails = (routeId: string) => {
                 {{ d.firstName }} {{ d.lastName }} ({{ d.employeeId }})
               </option>
             </select>
+            <p v-if="availableDrivers.length === 0" style="font-size: 11px; color: var(--color-gray-500); margin-top: 4px;">
+              No active drivers available.
+            </p>
           </div>
           <button type="submit" :disabled="assigningDriver || !selectedDriverId" class="btn-submit-form">
             <span v-if="assigningDriver">Assigning...</span>

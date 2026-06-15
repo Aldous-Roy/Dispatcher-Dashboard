@@ -47,7 +47,7 @@ const {
 const loadDriversList = async () => {
   loadingDrivers.value = true
   try {
-    const res = await apiClient.get('/drivers')
+    const res = await apiClient.get('/drivers', { params: { page: 0, size: 100 } })
     if (res.data && res.data.status === 'success') {
       // Filter for active drivers only for real-time tracking
       const allDrivers = res.data.data?.content || res.data.data || []

@@ -147,7 +147,7 @@ const loadAndSeedDrivers = async () => {
       console.warn('Failed to load drivers from API')
       return
     }
-    const apiDrivers = response.data.data || []
+    const apiDrivers = response.data.data?.content || response.data.data || []
 
     // 2. Load all routes
     let apiRoutes: any[] = []
@@ -656,7 +656,7 @@ const syncRoutesList = async () => {
       try {
         const drvRes = await apiClient.get('/drivers')
         if (drvRes.data && drvRes.data.status === 'success') {
-          apiDrivers = drvRes.data.data || []
+          apiDrivers = drvRes.data.data?.content || drvRes.data.data || []
         }
       } catch (e) {
         console.warn('Failed to load drivers for master list:', e)

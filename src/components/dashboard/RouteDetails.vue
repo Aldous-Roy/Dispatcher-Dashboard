@@ -53,7 +53,7 @@ const loadAvailableDrivers = async () => {
   try {
     const res = await apiClient.get('/drivers')
     if (res.data && res.data.status === 'success') {
-      const allDrivers = res.data.data || []
+      const allDrivers = res.data.data?.content || res.data.data || []
       availableDrivers.value = allDrivers.map((d: any) => ({
         id: d.driverId || d.employeeId,
         name: `${d.firstName} ${d.lastName}`,
@@ -179,7 +179,8 @@ const fetchRouteDetails = async () => {
       try {
         const driversRes = await apiClient.get('/drivers')
         if (driversRes.data && driversRes.data.status === 'success') {
-          const matchedDriver = driversRes.data.data.find(
+          const allDrivers = driversRes.data.data?.content || driversRes.data.data || []
+          const matchedDriver = allDrivers.find(
             (d: any) => d.driverId === routeData.value?.driverId || d.employeeId === routeData.value?.driverId
           )
           if (matchedDriver) {

@@ -91,7 +91,7 @@ watch(
         // Fetch specific driver if deep linked directly
         try {
           const res = await apiClient.get('/drivers')
-          const list = res.data?.data || []
+          const list = res.data?.data?.content || res.data?.data || []
           const found = list.find((d: any) => d.driverId === newId)
           if (found) selectedDriver.value = found
         } catch (e) {

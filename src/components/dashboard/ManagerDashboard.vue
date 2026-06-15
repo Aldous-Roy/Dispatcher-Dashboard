@@ -47,7 +47,7 @@ const loadDrivers = async () => {
   try {
     const response = await apiClient.get('/drivers')
     if (response.data && response.data.status === 'success') {
-      const apiDrivers = response.data.data || []
+      const apiDrivers = response.data.data?.content || response.data.data || []
       if (apiDrivers.length > 0) {
         drivers.value = apiDrivers.map((apiDriver: any) => {
           const fullName = `${apiDriver.firstName} ${apiDriver.lastName}`

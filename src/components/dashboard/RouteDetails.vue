@@ -47,6 +47,10 @@ const error = ref<string | null>(null)
 
 const availableDrivers = ref<Driver[]>([])
 const unassignedStops = ref<any[]>([])
+const unassignedPage = ref(0)
+const unassignedTotalPages = ref(0)
+const unassignedLoading = ref(false)
+const stopSearchQuery = ref('')
 const dragStopId = ref<string | null>(null)
 
 const loadAvailableDrivers = async () => {
@@ -54,10 +58,12 @@ const loadAvailableDrivers = async () => {
     const res = await apiClient.get('/drivers')
     if (res.data && res.data.status === 'success') {
       const allDrivers = res.data.data?.content || res.data.data || []
-      availableDrivers.value = allDrivers.map((d: any) => ({
+      availableDrivers.value = allDrivers
+        .filter((d: any) => d.active)
+        .map((d: any) => ({
         id: d.driverId || d.employeeId,
         name: `${d.firstName} ${d.lastName}`,
-        status: d.active ? 'Active' : 'Inactive',
+        status: 'Active',
         phone: d.phoneNumber ? `+91 ${d.phoneNumber}` : '+91 99999 99999'
       }))
     }
@@ -66,16 +72,60 @@ const loadAvailableDrivers = async () => {
   }
 }
 
-const loadUnassignedStops = async () => {
+const loadUnassignedStops = async (reset = true) => {
+  if (reset) {
+    unassignedPage.value = 0
+    unassignedStops.value = []
+  }
+  unassignedLoading.value = true
   try {
-    const res = await apiClient.get('/stops?page=0&size=100&sort=createdAt,desc')
+    const params: any = {
+      page: unassignedPage.value,
+      size: 20,
+      sort: 'createdAt,desc'
+    }
+    if (stopSearchQuery.value.trim()) {
+      params.search = stopSearchQuery.value.trim()
+    }
+    const res = await apiClient.get('/stops', { params })
     if (res.data && res.data.status === 'success') {
-      const allStops = res.data.data?.content || res.data.data || []
-      unassignedStops.value = allStops.filter((s: any) => s.status === 'PENDING')
+      const pageData = res.data.data
+      const allStops = pageData?.content || pageData || []
+      const pendingStops = allStops.filter((s: any) => s.status === 'PENDING')
+      if (reset) {
+        unassignedStops.value = pendingStops
+      } else {
+        unassignedStops.value.push(...pendingStops)
+      }
+      unassignedTotalPages.value = pageData?.totalPages || 1
     }
   } catch (e) {
     console.warn('Failed to load unassigned stops:', e)
+  } finally {
+    unassignedLoading.value = false
   }
+}
+
+const loadMoreStops = () => {
+  if (unassignedLoading.value) return
+  if (unassignedPage.value + 1 >= unassignedTotalPages.value) return
+  unassignedPage.value++
+  loadUnassignedStops(false)
+}
+
+const handleStopListScroll = (event: Event) => {
+  const el = event.target as HTMLElement
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) {
+    loadMoreStops()
+  }
+}
+
+let searchTimeout: ReturnType<typeof setTimeout> | null = null
+const handleStopSearch = () => {
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    loadUnassignedStops(true)
+  }, 350)
 }
 
 const assignDriver = async (driverId: string) => {
@@ -200,7 +250,7 @@ const fetchRouteDetails = async () => {
     error.value = err.message || 'Error loading route details'
   } finally {
     loading.value = false
-    if (routeData.value?.status === 'DRAFT') {
+    if (routeData.value?.status === 'DRAFT' || routeData.value?.status === 'PUBLISHED') {
       loadAvailableDrivers()
       loadUnassignedStops()
     }
@@ -422,7 +472,7 @@ onMounted(() => {
               <span class="contact-num">📞 {{ driver.phone }}</span>
             </div>
           </div>
-          <div v-if="routeData?.status === 'DRAFT'" class="driver-assign-box" style="padding: 16px; border-top: 1px solid var(--color-gray-100);">
+          <div v-if="(routeData?.status === 'DRAFT' || routeData?.status === 'PUBLISHED')" class="driver-assign-box" style="padding: 16px; border-top: 1px solid var(--color-gray-100);">
             <label style="font-size: 11px; font-weight: 700; color: var(--color-gray-500); display: block; margin-bottom: 6px; text-transform: uppercase;">
               Change/Assign Operator
             </label>
@@ -479,23 +529,64 @@ onMounted(() => {
 
       <!-- Right side: Stops timeline list -->
       <div class="right-pane">
-        <!-- Assign Stops Form Card -->
-        <section class="timeline-card" v-if="routeData?.status === 'DRAFT' && unassignedStops.length > 0" style="margin-bottom: 24px;">
+        <!-- Assign Stops Scrollable Card -->
+        <section class="timeline-card" v-if="routeData?.status === 'DRAFT' || routeData?.status === 'PUBLISHED'" style="margin-bottom: 24px;">
           <div class="card-header">
             <h3>Assign Stops / Orders</h3>
+            <span class="badge-count">{{ unassignedStops.length }} pending</span>
           </div>
-          <div style="padding: 16px;">
-            <p class="help-text" style="font-size: 12px; color: var(--color-gray-500); margin-bottom: 8px;">Select a pending order to dispatch on this route:</p>
-            <select 
-              @change="assignOrders(($event.target as HTMLSelectElement).value); ($event.target as HTMLSelectElement).value = ''" 
-              class="select-driver"
-              style="width: 100%; padding: 8px 10px; border: 1.5px solid var(--color-gray-200); border-radius: 6px; font-size: 12.5px; font-weight: 600; font-family: var(--font-sans); outline: none; background-color: var(--color-white);"
-            >
-              <option value="" disabled selected>Select pending order...</option>
-              <option v-for="s in unassignedStops" :key="s.orderId" :value="s.orderId">
-                {{ s.orderId }} - {{ s.customerName }} ({{ s.deliveryAddress }})
-              </option>
-            </select>
+          <div class="assign-stops-body">
+            <!-- Search -->
+            <div class="stop-search-box">
+              <svg class="stop-search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                v-model="stopSearchQuery"
+                @input="handleStopSearch"
+                placeholder="Search by order ID, customer, address..."
+                class="stop-search-input"
+              />
+            </div>
+
+            <!-- Scrollable Stop List -->
+            <div class="stop-picker-list" @scroll="handleStopListScroll">
+              <div
+                v-for="s in unassignedStops"
+                :key="s.orderId"
+                class="stop-picker-item"
+                @click="assignOrders(s.orderId)"
+              >
+                <div class="spi-left">
+                  <span class="spi-id">{{ s.orderId }}</span>
+                  <span class="spi-customer">{{ s.customerName }}</span>
+                  <span class="spi-address">{{ s.deliveryAddress }}</span>
+                </div>
+                <button class="spi-assign-btn">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" style="width:14px;height:14px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Assign
+                </button>
+              </div>
+
+              <!-- Loading more spinner -->
+              <div v-if="unassignedLoading" class="stop-picker-loading">
+                <div class="spinner-small"></div>
+                <span>Loading stops...</span>
+              </div>
+
+              <!-- Empty state -->
+              <div v-if="!unassignedLoading && unassignedStops.length === 0" class="stop-picker-empty">
+                <p>No pending stops available to assign.</p>
+              </div>
+
+              <!-- End of list -->
+              <div v-if="!unassignedLoading && unassignedStops.length > 0 && unassignedPage + 1 >= unassignedTotalPages" class="stop-picker-end">
+                <span>All pending stops loaded</span>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1201,6 +1292,161 @@ onMounted(() => {
 @keyframes ripple {
   0% { r: 6.5; opacity: 1; stroke-width: 1.5; }
   100% { r: 16; opacity: 0; stroke-width: 0.5; }
+}
+
+/* Assign Stops Picker */
+.assign-stops-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stop-search-box {
+  position: relative;
+}
+
+.stop-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--color-gray-500);
+}
+
+.stop-search-input {
+  width: 100%;
+  padding: 9px 14px 9px 36px;
+  border: 1.5px solid var(--color-gray-200);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  background-color: var(--color-white);
+  color: var(--color-gray-800);
+  transition: all 0.2s;
+}
+
+.stop-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(48, 109, 41, 0.1);
+}
+
+.stop-picker-list {
+  max-height: 340px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.stop-picker-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.stop-picker-list::-webkit-scrollbar-track {
+  background: var(--color-gray-100);
+  border-radius: 4px;
+}
+
+.stop-picker-list::-webkit-scrollbar-thumb {
+  background: var(--color-gray-400);
+  border-radius: 4px;
+}
+
+.stop-picker-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--color-gray-100);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: var(--color-white);
+}
+
+.stop-picker-item:hover {
+  border-color: var(--color-primary);
+  background-color: rgba(48, 109, 41, 0.03);
+  box-shadow: var(--shadow-sm);
+}
+
+.spi-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.spi-id {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--color-primary);
+}
+
+.spi-customer {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--color-gray-800);
+}
+
+.spi-address {
+  font-size: 11.5px;
+  color: var(--color-gray-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.spi-assign-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 6px;
+  background-color: var(--color-primary);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.spi-assign-btn:hover {
+  background-color: var(--color-primary-dark);
+}
+
+.stop-picker-loading,
+.stop-picker-empty,
+.stop-picker-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  font-size: 12px;
+  color: var(--color-gray-500);
+  font-weight: 600;
+}
+
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid var(--color-accent-sage);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s infinite linear;
 }
 
 /* Responsiveness */

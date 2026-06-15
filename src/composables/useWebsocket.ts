@@ -24,8 +24,24 @@ export function useWebsocket() {
     const wsUrl = getWsUrl()
     console.log(`[WebSocket] Connecting to STOMP broker at: ${wsUrl}`)
 
+    let token = ''
+    const sessionStr = localStorage.getItem('auth_session')
+    if (sessionStr) {
+      try {
+        const session = JSON.parse(sessionStr)
+        if (session && session.token) {
+          token = session.token
+        }
+      } catch (e) {
+        console.error('[WebSocket] Failed to parse auth session:', e)
+      }
+    }
+
     const stompClient = new Client({
       brokerURL: wsUrl,
+      connectHeaders: {
+        Authorization: token ? `Bearer ${token}` : ''
+      },
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,

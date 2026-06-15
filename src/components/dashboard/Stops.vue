@@ -107,6 +107,66 @@ const handleAddStop = async () => {
   }
 }
 
+// Assign Route Drawer State
+const showAssignDrawer = ref(false)
+const assigningStopId = ref<string | null>(null)
+const availableRoutes = ref<any[]>([])
+const selectedRouteId = ref('')
+const assigningRoute = ref(false)
+const assignError = ref<string | null>(null)
+const loadingRoutes = ref(false)
+
+const openAssignDrawer = async (stop: StopItem) => {
+  assigningStopId.value = stop.orderId
+  selectedRouteId.value = ''
+  assignError.value = null
+  availableRoutes.value = []
+  showAssignDrawer.value = true
+  loadingRoutes.value = true
+  
+  try {
+    const res = await apiClient.get('/routes', {
+      params: { page: 0, size: 100, sort: 'routeDate,desc' }
+    })
+    if (res.data && res.data.status === 'success') {
+      const allRoutes = res.data.data?.content || res.data.data || []
+      // Show all non-terminal routes (exclude COMPLETED and CANCELLED)
+      availableRoutes.value = allRoutes.filter(
+        (r: any) => r.status !== 'COMPLETED' && r.status !== 'CANCELLED'
+      )
+    }
+  } catch (err: any) {
+    console.warn('Failed to load available routes:', err)
+    assignError.value = 'Failed to load routes. Please try again.'
+  } finally {
+    loadingRoutes.value = false
+  }
+}
+
+const handleAssignRoute = async () => {
+  if (!selectedRouteId.value || !assigningStopId.value) return
+  
+  assigningRoute.value = true
+  assignError.value = null
+  
+  try {
+    const res = await apiClient.post(`/routes/${selectedRouteId.value}/assign-orders`, {
+      orderIds: [assigningStopId.value]
+    })
+    
+    if (res.data && res.data.status === 'success') {
+      showAssignDrawer.value = false
+      loadData()
+    } else {
+      throw new Error(res.data.message || 'Assignment failed')
+    }
+  } catch (err: any) {
+    assignError.value = err.response?.data?.message || err.message || 'Failed to assign route'
+  } finally {
+    assigningRoute.value = false
+  }
+}
+
 // Stop state actions
 const startDelivery = async (stop: StopItem) => {
   try {
@@ -247,7 +307,15 @@ const formatDate = (dateStr: string) => {
               <td>
                 <div class="actions-cell-group">
                   <button 
-                    v-if="stop.status === 'ROUTED'" 
+                    v-if="stop.status === 'PENDING'" 
+                    @click="openAssignDrawer(stop)" 
+                    class="btn-stop-action"
+                    style="background-color: var(--color-primary); color: white;"
+                  >
+                    Assign Route
+                  </button>
+                  <button 
+                    v-else-if="stop.status === 'ROUTED'" 
                     @click="startDelivery(stop)" 
                     class="btn-stop-action start"
                   >
@@ -356,6 +424,54 @@ const formatDate = (dateStr: string) => {
             <span v-if="submitting">Registering...</span>
             <span v-else>Register Order</span>
           </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Assign Route Drawer -->
+    <div class="details-drawer-overlay" v-if="showAssignDrawer" @click="showAssignDrawer = false">
+      <div class="details-drawer" @click.stop>
+        <div class="drawer-header">
+          <h2>Assign Route</h2>
+          <button @click="showAssignDrawer = false" class="btn-close-drawer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="close-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <form @submit.prevent="handleAssignRoute" class="drawer-form">
+          <div v-if="assignError" class="form-error-banner">
+            {{ assignError }}
+          </div>
+
+          <!-- Loading state -->
+          <div v-if="loadingRoutes" style="display: flex; align-items: center; gap: 10px; padding: 20px 0; justify-content: center; color: var(--color-gray-500); font-size: 13px; font-weight: 600;">
+            <div class="spinner" style="width: 20px; height: 20px; border-width: 2.5px;"></div>
+            Loading available routes...
+          </div>
+
+          <!-- No routes available -->
+          <div v-else-if="availableRoutes.length === 0" style="text-align: center; padding: 24px 0; color: var(--color-gray-500); font-size: 13px;">
+            <p style="font-weight: 700; margin-bottom: 4px;">No routes available</p>
+            <p style="font-size: 12px;">Create a route first from the Routes page, then come back to assign stops.</p>
+          </div>
+
+          <!-- Route selector -->
+          <template v-else>
+            <div class="form-group">
+              <label>Select Route <span style="font-weight: 500; color: var(--color-gray-500);">({{ availableRoutes.length }} available)</span></label>
+              <select v-model="selectedRouteId" required class="input-form" style="background-color: var(--color-white);">
+                <option value="" disabled>Select a route...</option>
+                <option v-for="r in availableRoutes" :key="r.routeId" :value="r.routeId">
+                  {{ r.routeCode }} — {{ r.routeDate }} ({{ r.status }}) {{ r.driverId ? '' : '⚠ No driver' }}
+                </option>
+              </select>
+            </div>
+            <button type="submit" :disabled="assigningRoute || !selectedRouteId" class="btn-submit-form">
+              <span v-if="assigningRoute">Assigning...</span>
+              <span v-else>Assign to Route</span>
+            </button>
+          </template>
         </form>
       </div>
     </div>

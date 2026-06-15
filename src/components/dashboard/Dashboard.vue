@@ -86,19 +86,17 @@ interface DashboardData {
 const dashboardMetrics = ref<DashboardData | null>(null)
 
 const loadDashboardMetrics = async () => {
-  // Commented out live API call per user request to display static mock data instead
-  /*
   try {
     const response = await apiClient.get('/dashboard/summary')
     if (response.data && response.data.status === 'success') {
       dashboardMetrics.value = response.data.data
+      return // Exit on success
     }
   } catch (err) {
-    console.warn('Failed to load dashboard metrics from API:', err)
+    console.warn('Failed to load dashboard metrics from API, falling back to static metrics:', err)
   }
-  */
   
-  // Static mock summary metrics
+  // Static mock summary metrics fallback
   dashboardMetrics.value = {
     totalUsers: 13,
     totalDrivers: 4,

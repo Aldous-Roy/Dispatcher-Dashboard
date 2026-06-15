@@ -86,6 +86,55 @@ const handleAddRoute = async () => {
   }
 }
 
+// Assign Driver Drawer State
+const showAssignDrawer = ref(false)
+const assigningRouteId = ref<string | null>(null)
+const availableDrivers = ref<any[]>([])
+const selectedDriverId = ref('')
+const assigningDriver = ref(false)
+const assignError = ref<string | null>(null)
+
+const openAssignDrawer = async (routeId: string) => {
+  assigningRouteId.value = routeId
+  selectedDriverId.value = ''
+  assignError.value = null
+  showAssignDrawer.value = true
+  
+  try {
+    const res = await apiClient.get('/drivers')
+    if (res.data && res.data.status === 'success') {
+      const allDrivers = res.data.data?.content || res.data.data || []
+      availableDrivers.value = allDrivers.filter((d: any) => d.active)
+    }
+  } catch (err) {
+    console.warn('Failed to load available drivers:', err)
+  }
+}
+
+const handleAssignDriver = async () => {
+  if (!selectedDriverId.value || !assigningRouteId.value) return
+  
+  assigningDriver.value = true
+  assignError.value = null
+  
+  try {
+    const res = await apiClient.post(`/routes/${assigningRouteId.value}/assign-driver`, {
+      driverId: selectedDriverId.value
+    })
+    
+    if (res.data && res.data.status === 'success') {
+      showAssignDrawer.value = false
+      loadData()
+    } else {
+      throw new Error(res.data.message || 'Assignment failed')
+    }
+  } catch (err: any) {
+    assignError.value = err.response?.data?.message || err.message || 'Failed to assign driver'
+  } finally {
+    assigningDriver.value = false
+  }
+}
+
 const viewDetails = (routeId: string) => {
   router.push(`/routes/${routeId}`)
 }
@@ -185,7 +234,15 @@ const viewDetails = (routeId: string) => {
                   {{ route.status }}
                 </span>
               </td>
-              <td @click.stop>
+              <td @click.stop style="display: flex; gap: 8px;">
+                <button 
+                  v-if="!route.driverId && (route.status === 'DRAFT' || route.status === 'PUBLISHED')" 
+                  @click="openAssignDrawer(route.routeId)" 
+                  class="btn-toggle-status"
+                  style="background-color: var(--color-primary); color: white;"
+                >
+                  Assign Driver
+                </button>
                 <button @click="viewDetails(route.routeId)" class="btn-toggle-status">
                   View Details
                 </button>
@@ -256,6 +313,38 @@ const viewDetails = (routeId: string) => {
           <button type="submit" :disabled="submitting" class="btn-submit-form">
             <span v-if="submitting">Saving Route...</span>
             <span v-else>Create Route</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Assign Driver Drawer -->
+    <div class="details-drawer-overlay" v-if="showAssignDrawer" @click="showAssignDrawer = false">
+      <div class="details-drawer" @click.stop>
+        <div class="drawer-header">
+          <h2>Assign Driver</h2>
+          <button @click="showAssignDrawer = false" class="btn-close-drawer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="close-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <form @submit.prevent="handleAssignDriver" class="drawer-form">
+          <div v-if="assignError" class="form-error-banner">
+            {{ assignError }}
+          </div>
+          <div class="form-group">
+            <label>Select Driver</label>
+            <select v-model="selectedDriverId" required class="input-form">
+              <option value="" disabled>Select a driver...</option>
+              <option v-for="d in availableDrivers" :key="d.driverId || d.employeeId" :value="d.driverId || d.employeeId">
+                {{ d.firstName }} {{ d.lastName }} ({{ d.employeeId }})
+              </option>
+            </select>
+          </div>
+          <button type="submit" :disabled="assigningDriver || !selectedDriverId" class="btn-submit-form">
+            <span v-if="assigningDriver">Assigning...</span>
+            <span v-else>Assign Driver</span>
           </button>
         </form>
       </div>

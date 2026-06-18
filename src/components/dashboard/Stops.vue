@@ -287,7 +287,7 @@ const viewPodImage = (url: string | null | undefined) => {
         <p class="subtitle">Import dispatch stops, register package dimensions, and change delivery execution states</p>
       </div>
       <div style="display: flex; gap: 12px;">
-        <button @click="handleAutoAllocateToday" class="btn-create" style="background-color: #1e40af;" :disabled="allocatingRoute">
+        <button @click="handleAutoAllocateToday" class="btn-create" :disabled="allocatingRoute">
           <span v-if="allocatingRoute">Allocating...</span>
           <span v-else>Auto Allocate Today's Orders</span>
         </button>

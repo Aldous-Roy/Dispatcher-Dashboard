@@ -223,6 +223,16 @@ const formatDate = (dateStr: string) => {
         <h1>Drivers</h1>
         <p class="subtitle">Configure operational operator capacities and view live attendance status</p>
       </div>
+      <div class="header-actions" style="display: flex; gap: 12px; align-items: center;">
+        <button @click="downloadDriversCSV" class="btn-download" style="background-color: #10b981; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+          Download driver details
+        </button>
+        <button @click="showCreateModal = true" class="btn-create" style="background-color: var(--color-primary); color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
+          Create Driver
+        </button>
+      </div>
     </div>
 
     <section class="table-section">
@@ -230,17 +240,6 @@ const formatDate = (dateStr: string) => {
         <div class="header-left">
           <h3>Drivers List</h3>
           <span class="badge-count">{{ total }} operators</span>
-        </div>
-        
-        <div class="header-actions" style="display: flex; gap: 12px; align-items: center;">
-          <button @click="downloadDriversCSV" class="btn-download" style="background-color: #10b981; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-            Download driver details
-          </button>
-          <button @click="showCreateModal = true" class="btn-create" style="background-color: var(--color-primary); color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-            Create Driver
-          </button>
         </div>
         
         <!-- Search bar -->

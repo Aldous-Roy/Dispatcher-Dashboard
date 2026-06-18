@@ -435,46 +435,71 @@ const getStopRatio = (driver: typeof activeDrivers.value[0]) => {
   return `${completed}/${total}`
 }
 
+// CSV PREVIEW STATE
+const showCsvPreview = ref(false)
+const stagedStops = ref<ParsedStop[]>([])
+const isInsertingOrders = ref(false)
+
 // CSV IMPORT & SIMULATED GEOCODING
 const handleStopsLoaded = async (loadedStops: ParsedStop[]) => {
+  stagedStops.value = loadedStops
+  showCsvPreview.value = true
+}
+
+const confirmAndInsertOrders = async () => {
+  if (stagedStops.value.length === 0) return
+  isInsertingOrders.value = true
   dashboardMetrics.value = null // Switch to dynamic client-side calculations
+  
+  try {
+    const payload = stagedStops.value.map(s => ({
+      orderId: s.orderId,
+      routeCode: null,
+      customerName: s.customerName,
+      customerPhone: s.customerPhone,
+      deliveryAddress: s.deliveryAddress,
+      latitude: s.latitude,
+      longitude: s.longitude,
+      timeWindowStart: new Date().toISOString().slice(0, 10) + 'T09:00:00',
+      timeWindowEnd: new Date().toISOString().slice(0, 10) + 'T18:00:00',
+      packageWeightKg: s.packageWeightKg,
+      packageVolumeCbms: s.packageVolumeCbms,
+      serviceTimeMins: s.serviceTimeMins,
+      requiredPodType: s.requiredPodType
+    }))
 
-  for (const s of loadedStops) {
-    try {
-      // POST to stops API
-      await apiClient.post('/stops', {
-        orderId: s.orderId,
-        routeCode: null,
-        customerName: s.customerName,
-        customerPhone: s.customerPhone,
-        deliveryAddress: s.deliveryAddress,
-        latitude: s.latitude,
-        longitude: s.longitude,
-        timeWindowStart: new Date().toISOString().slice(0, 10) + 'T09:00:00',
-        timeWindowEnd: new Date().toISOString().slice(0, 10) + 'T18:00:00',
-        packageWeightKg: s.packageWeightKg,
-        packageVolumeCbms: s.packageVolumeCbms,
-        serviceTimeMins: s.serviceTimeMins,
-        requiredPodType: s.requiredPodType
-      })
-
-      const stopObj: Stop = {
-        id: s.orderId,
-        address: s.deliveryAddress,
-        customerName: s.customerName,
-        customerPhone: s.customerPhone,
-        packageCount: Math.max(1, Math.round(s.packageWeightKg / 1.5)),
-        priority: s.requiredPodType === 'SIGNATURE_REQUIRED' ? 'High' : 'Medium',
-        latitude: s.latitude,
-        longitude: s.longitude,
-        geocoding: false,
-        status: 'PENDING',
-        failedReasonNotes: null
+    // Use the new bulk insert API
+    const response = await apiClient.post('/stops/bulk', payload)
+    
+    if (response.data && response.data.status === 'success') {
+      const createdStops = response.data.data
+      
+      for (let i = 0; i < createdStops.length; i++) {
+        const s = stagedStops.value[i]
+        const stopObj: Stop = {
+          id: createdStops[i].orderId,
+          address: s.deliveryAddress,
+          customerName: s.customerName,
+          customerPhone: s.customerPhone,
+          packageCount: Math.max(1, Math.round(s.packageWeightKg / 1.5)),
+          priority: s.requiredPodType === 'SIGNATURE_REQUIRED' ? 'High' : 'Medium',
+          latitude: s.latitude,
+          longitude: s.longitude,
+          geocoding: false,
+          status: 'PENDING',
+          failedReasonNotes: null
+        }
+        pendingStops.value.push(stopObj)
       }
-      pendingStops.value.push(stopObj)
-    } catch (err) {
-      console.error(`Failed to register stop ${s.orderId} on backend:`, err)
     }
+    
+    showCsvPreview.value = false
+    stagedStops.value = []
+  } catch (err) {
+    console.error('Failed to register bulk stops on backend:', err)
+    alert('Failed to insert orders. Please try again.')
+  } finally {
+    isInsertingOrders.value = false
   }
 }
 
@@ -1038,6 +1063,49 @@ const syncRoutesList = async () => {
           <div class="planner-sidebar">
             <CSVUpload @stops-loaded="handleStopsLoaded" />
             
+            <!-- CSV Preview Modal -->
+            <div v-if="showCsvPreview" class="modal-overlay" style="z-index: 100;">
+              <div class="modal-content" style="max-width: 800px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
+                <div class="modal-header">
+                  <h3>Preview Imported Orders</h3>
+                  <button class="btn-close" @click="showCsvPreview = false">✕</button>
+                </div>
+                
+                <div class="modal-body" style="overflow-y: auto; padding: 0;">
+                  <table class="fleet-table" style="margin: 0;">
+                    <thead>
+                      <tr>
+                        <th>Order ID</th>
+                        <th>Customer</th>
+                        <th>Address</th>
+                        <th>Weight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="stop in stagedStops" :key="stop.orderId">
+                        <td class="driver-id">{{ stop.orderId }}</td>
+                        <td class="driver-name">{{ stop.customerName }}</td>
+                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="stop.deliveryAddress">{{ stop.deliveryAddress }}</td>
+                        <td>{{ stop.packageWeightKg }} kg</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 12px; padding: 16px; border-top: 1px solid var(--color-gray-200);">
+                  <button class="btn-secondary" @click="showCsvPreview = false">Cancel</button>
+                  <button 
+                    class="btn-create" 
+                    style="background-color: #10b981; color: white;" 
+                    @click="confirmAndInsertOrders"
+                    :disabled="isInsertingOrders"
+                  >
+                    <span v-if="isInsertingOrders">Inserting...</span>
+                    <span v-else>Insert {{ stagedStops.length }} Orders</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <div 
               class="pending-stops-container"
               :class="{ 'drag-over': activeDragOverLane === 'pending' }"

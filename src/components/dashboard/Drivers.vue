@@ -96,6 +96,16 @@ const handleCreateDriver = async () => {
         employeeId: res.data.data.employeeId,
         password: newDriver.value.password
       }
+      
+      // Save password mapping locally in the browser so it can be exported to CSV later
+      try {
+        const savedPasswords = JSON.parse(localStorage.getItem('driver_passwords') || '{}')
+        savedPasswords[res.data.data.employeeId] = newDriver.value.password
+        localStorage.setItem('driver_passwords', JSON.stringify(savedPasswords))
+      } catch (e) {
+        console.error('Failed to save driver password locally:', e)
+      }
+
       loadData()
       // Reset form
       newDriver.value = {
@@ -124,18 +134,20 @@ const closeCreateModal = () => {
 const downloadDriversCSV = () => {
   if (!drivers.value || drivers.value.length === 0) return
   
-  const headers = ['Driver ID', 'Employee ID', 'First Name', 'Last Name', 'Phone Number', 'Vehicle Type']
+  const headers = ['Driver ID', 'Employee ID', 'First Name', 'Last Name', 'Phone Number', 'Vehicle Type', 'Password']
   const csvRows = []
   csvRows.push(headers.join(','))
-  
+
   drivers.value.forEach(d => {
+    const pwd = d.password || ''
     const row = [
       d.driverId,
       d.employeeId,
       d.firstName,
       d.lastName,
       d.phoneNumber,
-      d.vehicleType || 'VAN'
+      d.vehicleType || 'VAN',
+      pwd
     ]
     csvRows.push(row.map(val => `"${val}"`).join(','))
   })

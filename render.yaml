@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: virtusa-logistics-dashboard
+    env: docker
+    plan: free
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: VITE_API_URL
+        value: https://virtusa-logistics.onrender.com/api

@@ -713,6 +713,25 @@ const publishRoutes = async () => {
   }
 }
 
+const isAllocating = ref(false)
+const autoAllocate = async () => {
+  isAllocating.value = true
+  try {
+    const res = await apiClient.post('/routes/auto-allocate')
+    if (res.data && res.data.status === 'success') {
+      await loadAndSeedDrivers()
+      await loadStopsAndExceptions()
+      alert('Routes auto-allocated successfully based on performance!')
+    } else {
+      throw new Error(res.data.message || 'Auto-allocation failed')
+    }
+  } catch (err: any) {
+    alert(err.response?.data?.message || err.message || 'Failed to auto-allocate routes')
+  } finally {
+    isAllocating.value = false
+  }
+}
+
 const startDelivery = async (stop: Stop) => {
   try {
     const res = await apiClient.post(`/stops/${stop.id}/start-delivery`)
@@ -1087,7 +1106,16 @@ const syncRoutesList = async () => {
                 <h3>Driver Load Sequences</h3>
                 <p>Drag stops up and down to resequence. Drag stops between lanes to reassign drivers.</p>
               </div>
-              <div class="board-actions">
+              <div class="board-actions" style="display: flex; gap: 8px;">
+                <button 
+                  @click="autoAllocate" 
+                  class="btn-auto-allocate" 
+                  :disabled="isAllocating"
+                  style="background-color: var(--color-primary-dark); color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; transition: all 0.2s;"
+                >
+                  <span v-if="isAllocating">Allocating...</span>
+                  <span v-else>Auto-Allocate Routes</span>
+                </button>
                 <button 
                   @click="publishRoutes" 
                   class="btn-publish" 

@@ -465,7 +465,8 @@ const confirmAndInsertOrders = async () => {
       packageWeightKg: s.packageWeightKg,
       packageVolumeCbms: s.packageVolumeCbms,
       serviceTimeMins: s.serviceTimeMins,
-      requiredPodType: s.requiredPodType
+      requiredPodType: s.requiredPodType,
+      deliveryDate: s.deliveryDate
     }))
 
     // Use the new bulk insert API

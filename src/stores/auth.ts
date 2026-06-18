@@ -250,7 +250,16 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    logout() {
+    async logout() {
+      // Call backend logout to set active = false
+      if (this.token && !this.isMocked) {
+        try {
+          await apiClient.post('/auth/logout')
+        } catch (e) {
+          console.warn('Failed to logout on backend', e)
+        }
+      }
+
       // Reset state
       this.token = null
       this.tokenType = 'Bearer'

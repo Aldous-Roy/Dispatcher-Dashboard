@@ -63,6 +63,95 @@ const closeDriverDetails = () => {
   router.push('/drivers')
 }
 
+// Create Driver State
+const showCreateModal = ref(false)
+const createLoading = ref(false)
+const createError = ref('')
+const createSuccess = ref(false)
+const newDriver = ref({
+  firstName: '',
+  lastName: '',
+  phoneNumber: '',
+  password: '',
+  vehicleType: 'VAN'
+})
+const createdDriverData = ref<any>(null)
+
+const handleCreateDriver = async () => {
+  createError.value = ''
+  createLoading.value = true
+  createSuccess.value = false
+  try {
+    const res = await apiClient.post('/drivers/register', {
+      firstName: newDriver.value.firstName,
+      lastName: newDriver.value.lastName,
+      phoneNumber: newDriver.value.phoneNumber,
+      password: newDriver.value.password,
+      vehicleType: newDriver.value.vehicleType,
+      active: true
+    })
+    if (res.data && res.data.status === 'success') {
+      createSuccess.value = true
+      createdDriverData.value = {
+        employeeId: res.data.data.employeeId,
+        password: newDriver.value.password
+      }
+      loadData()
+      // Reset form
+      newDriver.value = {
+        firstName: '',
+        lastName: '',
+        phoneNumber: '',
+        password: '',
+        vehicleType: 'VAN'
+      }
+    } else {
+      createError.value = 'Failed to create driver'
+    }
+  } catch (err: any) {
+    createError.value = err.response?.data?.message || 'Error creating driver'
+  } finally {
+    createLoading.value = false
+  }
+}
+
+const closeCreateModal = () => {
+  showCreateModal.value = false
+  createSuccess.value = false
+  createError.value = ''
+}
+
+const downloadDriversCSV = () => {
+  if (!drivers.value || drivers.value.length === 0) return
+  
+  const headers = ['Driver ID', 'Employee ID', 'First Name', 'Last Name', 'Phone Number', 'Vehicle Type']
+  const csvRows = []
+  csvRows.push(headers.join(','))
+  
+  drivers.value.forEach(d => {
+    const row = [
+      d.driverId,
+      d.employeeId,
+      d.firstName,
+      d.lastName,
+      d.phoneNumber,
+      d.vehicleType || 'VAN'
+    ]
+    csvRows.push(row.map(val => `"${val}"`).join(','))
+  })
+  
+  const csvString = csvRows.join('\n')
+  const blob = new Blob([csvString], { type: 'text/csv' })
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.setAttribute('hidden', '')
+  a.setAttribute('href', url)
+  a.setAttribute('download', 'driver_details.csv')
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 const fetchDriverLocation = async (driverId: string) => {
   loadingLocation.value = true
   selectedDriverLocation.value = null
@@ -158,6 +247,17 @@ const formatDate = (dateStr: string) => {
         <div class="header-left">
           <h3>Drivers List</h3>
           <span class="badge-count">{{ total }} operators</span>
+        </div>
+        
+        <div class="header-actions" style="display: flex; gap: 12px; align-items: center;">
+          <button @click="downloadDriversCSV" class="btn-download" style="background-color: #10b981; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            Download driver details
+          </button>
+          <button @click="showCreateModal = true" class="btn-create" style="background-color: var(--color-primary); color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
+            Create Driver
+          </button>
         </div>
         
         <!-- Search bar -->
@@ -274,6 +374,78 @@ const formatDate = (dateStr: string) => {
         </div>
       </div>
     </section>
+
+    <!-- Create Driver Modal -->
+    <div v-if="showCreateModal" class="modal-backdrop" @click="closeCreateModal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h2>Register New Driver</h2>
+          <button class="btn-close" @click="closeCreateModal">✕</button>
+        </div>
+        
+        <div class="modal-body" v-if="!createSuccess">
+          <p class="modal-desc">Create a new driver profile. They will use the generated Employee ID and the password you set to login to the mobile app.</p>
+          
+          <div class="form-group">
+            <label>First Name</label>
+            <input type="text" v-model="newDriver.firstName" placeholder="e.g. John" class="form-input" />
+          </div>
+          
+          <div class="form-group">
+            <label>Last Name</label>
+            <input type="text" v-model="newDriver.lastName" placeholder="e.g. Doe" class="form-input" />
+          </div>
+          
+          <div class="form-group">
+            <label>Phone Number</label>
+            <input type="text" v-model="newDriver.phoneNumber" placeholder="e.g. 9876543210" class="form-input" />
+          </div>
+          
+          <div class="form-group">
+            <label>Login Password</label>
+            <input type="text" v-model="newDriver.password" placeholder="Set a permanent password" class="form-input" />
+            <span style="font-size: 11px; color: #64748b; margin-top: 4px; display: block;">Drivers cannot change this password later.</span>
+          </div>
+
+          <div class="form-group">
+            <label>Vehicle Type</label>
+            <select v-model="newDriver.vehicleType" class="form-input">
+              <option value="VAN">Van (50 pkgs / 300kg)</option>
+              <option value="BIKE">Bike (15 pkgs / 20kg)</option>
+            </select>
+          </div>
+          
+          <div v-if="createError" class="error-msg" style="margin-top: 10px; padding: 10px; background: #fef2f2; border-radius: 6px;">
+            ⚠️ {{ createError }}
+          </div>
+        </div>
+
+        <div class="modal-body success-state" v-else>
+          <div class="success-icon">✅</div>
+          <h3>Driver Registered Successfully!</h3>
+          <p>Please share these exact credentials with the driver:</p>
+          
+          <div class="credentials-box">
+            <div class="cred-row">
+              <span class="cred-label">Employee ID:</span>
+              <span class="cred-value">{{ createdDriverData?.employeeId }}</span>
+            </div>
+            <div class="cred-row">
+              <span class="cred-label">Password:</span>
+              <span class="cred-value">{{ createdDriverData?.password }}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="closeCreateModal" v-if="!createSuccess">Cancel</button>
+          <button class="btn-save" @click="handleCreateDriver" :disabled="createLoading || !newDriver.firstName || !newDriver.lastName || !newDriver.password" v-if="!createSuccess">
+            {{ createLoading ? 'Registering...' : 'Register Driver' }}
+          </button>
+          <button class="btn-save" @click="closeCreateModal" v-if="createSuccess">Done</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Slide Out Drawer for Driver Details -->
     <div class="details-drawer-overlay" v-if="selectedDriver" @click="closeDriverDetails">
@@ -931,6 +1103,160 @@ const formatDate = (dateStr: string) => {
 .btn-page:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Modal Styles */
+.modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 450px;
+  max-width: 90vw;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-gray-100);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--color-gray-500);
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-desc {
+  font-size: 13px;
+  color: var(--color-gray-500);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-gray-800);
+  margin-bottom: 6px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-gray-200);
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  background-color: var(--color-gray-50);
+  border-top: 1px solid var(--color-gray-100);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-cancel {
+  background: white;
+  border: 1px solid var(--color-gray-200);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-save {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.success-state {
+  text-align: center;
+  padding: 30px 20px;
+}
+
+.success-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.credentials-box {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 20px;
+  text-align: left;
+}
+
+.cred-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.cred-row:last-child {
+  margin-bottom: 0;
+}
+
+.cred-label {
+  font-weight: 600;
+  color: var(--color-gray-500);
+}
+
+.cred-value {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  font-family: monospace;
+  font-size: 15px;
 }
 
 .loading-state-box, .error-state-box {

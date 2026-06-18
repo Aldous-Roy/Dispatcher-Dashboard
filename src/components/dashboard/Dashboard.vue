@@ -98,29 +98,31 @@ const loadDashboardMetrics = async () => {
     console.warn('Failed to load dashboard metrics from API, falling back to static metrics:', err)
   }
   
-  // Static mock summary metrics fallback
+  // Fallback to zeros if API fails (Commented out per request)
+  /*
   dashboardMetrics.value = {
-    totalUsers: 13,
-    totalDrivers: 4,
-    activeDrivers: 4,
-    totalRoutes: 3,
+    totalUsers: 0,
+    totalDrivers: 0,
+    activeDrivers: 0,
+    totalRoutes: 0,
     routesByStatus: {
-      DRAFT: 1,
-      PUBLISHED: 1,
-      ACTIVE: 1,
+      DRAFT: 0,
+      PUBLISHED: 0,
+      ACTIVE: 0,
       COMPLETED: 0,
       CANCELLED: 0
     },
     ordersByStatus: {
-      PENDING: 1,
-      ROUTED: 2,
-      OUT_FOR_DELIVERY: 1,
-      DELIVERED: 4,
+      PENDING: 0,
+      ROUTED: 0,
+      OUT_FOR_DELIVERY: 0,
+      DELIVERED: 0,
       FAILED: 0
     },
-    deliveredToday: 4,
-    pendingPods: 2
+    deliveredToday: 0,
+    pendingPods: 0
   }
+  */
 }
 
 const mapApiStop = (apiStop: any): Stop => {

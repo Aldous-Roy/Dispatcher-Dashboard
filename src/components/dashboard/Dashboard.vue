@@ -473,7 +473,7 @@ const handleStopsLoaded = async (loadedStops: ParsedStop[]) => {
       }
       pendingStops.value.push(stopObj)
     } catch (err) {
-      console.error(`Failed to register stop ${orderId} on backend:`, err)
+      console.error(`Failed to register stop ${s.orderId} on backend:`, err)
     }
   }
 }

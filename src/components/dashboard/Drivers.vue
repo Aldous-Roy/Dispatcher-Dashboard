@@ -201,26 +201,9 @@ watch(
 )
 
 // Activate/Deactivate Toggle
-const toggleDriverStatus = async (driver: DriverItem) => {
-  try {
-    // Standard backend toggles active state
-    const res = await apiClient.patch(`/drivers/${driver.driverId}/status`, {
-      active: !driver.active
-    }).catch(async () => {
-      // Fallback: If patch isn't supported, use generic endpoint or mock update
-      return apiClient.post(`/drivers/${driver.driverId}/toggle-status`, {})
-    })
-    
-    if (res.data && res.data.status === 'success') {
-      driver.active = !driver.active
-      loadData()
-    }
-  } catch (err) {
-    // Local optimistic fallback if route is missing in sandbox
-    driver.active = !driver.active
-    console.warn('Opted for optimistic local status change due to missing toggling endpoint.')
-  }
-}
+// const toggleDriverStatus = async (driver: DriverItem) => {
+// ...
+// }
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '-'

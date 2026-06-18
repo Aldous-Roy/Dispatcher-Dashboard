@@ -464,7 +464,7 @@ onMounted(() => {
         <!-- Route Specs -->
         <section class="info-card" v-if="routeData">
           <div class="card-header">
-            <h3>Operational Parameters</h3>
+            <h3>Route Info</h3>
           </div>
           <div class="specs-grid">
             <div class="spec-item">
@@ -489,7 +489,7 @@ onMounted(() => {
         <!-- Driver Profile -->
         <section class="info-card">
           <div class="card-header">
-            <h3>Assigned Operator</h3>
+            <h3>Assigned Driver</h3>
           </div>
           <div v-if="driver" class="driver-profile">
             <div class="avatar">
@@ -528,7 +528,7 @@ onMounted(() => {
         <!-- Route Status Controls -->
         <section class="info-card" v-if="routeData">
           <div class="card-header">
-            <h3>Route Status Lifecycle</h3>
+            <h3>Status History</h3>
           </div>
           <div class="lifecycle-controls">
             <div v-if="routeData.status === 'DRAFT'" class="btn-group-column">
@@ -625,7 +625,7 @@ onMounted(() => {
 
         <section class="timeline-card">
           <div class="card-header">
-            <h3>Sequence Timeline</h3>
+            <h3>Delivery Sequence</h3>
             <span class="badge-count">{{ stops.length }} Stops</span>
           </div>
 
@@ -692,7 +692,7 @@ onMounted(() => {
     <!-- Bottom Pane: Interactive SVG map path visualization -->
     <footer class="map-visualization" v-if="!loading && !error && stops.length > 0">
       <div class="card-header">
-        <h3>Simulated Logistics Routing Map</h3>
+        <h3>Route Map</h3>
       </div>
       <div class="map-wrapper">
         <svg class="map-svg" viewBox="0 0 400 200" fill="none" xmlns="http://www.w3.org/2000/svg">

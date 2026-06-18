@@ -130,7 +130,7 @@ const formatTime = (timeStr: string) => {
 <template>
   <DashboardLayout>
     <div class="page-title-section">
-      <h1>Live Operator Telemetry</h1>
+      <h1>Live Tracking</h1>
       <p class="subtitle">Subscribe to active driver terminals and track delivery vehicles in real-time</p>
     </div>
 
@@ -179,7 +179,7 @@ const formatTime = (timeStr: string) => {
       <!-- Right pane: Console log and STOMP details -->
       <div class="console-pane">
         <div class="console-header">
-          <h3>WebSocket Telemetry Log</h3>
+          <h3>Location Updates</h3>
           <span class="socket-status" :class="{ connected }">
             {{ connected ? 'STOMP CONNECTED' : 'STOMP DISCONNECTED' }}
           </span>

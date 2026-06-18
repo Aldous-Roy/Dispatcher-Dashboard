@@ -44,14 +44,14 @@ const getActivePillClass = (active: boolean) => active ? 'status-pill active' : 
 <template>
   <DashboardLayout>
     <div class="page-title-section">
-      <h1>User Registry</h1>
+      <h1>Users</h1>
       <p class="subtitle">Search and view active dispatcher and terminal profiles on the system</p>
     </div>
 
     <section class="table-section">
       <div class="card-header border-none">
         <div class="header-left">
-          <h3>Terminal Users</h3>
+          <h3>System Users</h3>
           <span class="badge-count">{{ total }} items</span>
         </div>
         

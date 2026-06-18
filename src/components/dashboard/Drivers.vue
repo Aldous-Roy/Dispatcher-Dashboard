@@ -16,6 +16,7 @@ interface DriverItem {
   active: boolean
   createdAt: string
   updatedAt: string
+  vehicleType?: string
 }
 
 const route = useRoute()
@@ -147,7 +148,7 @@ const formatDate = (dateStr: string) => {
   <DashboardLayout>
     <div class="page-title-section">
       <div class="title-left">
-        <h1>Driver Roster</h1>
+        <h1>Drivers</h1>
         <p class="subtitle">Configure operational operator capacities and view live attendance status</p>
       </div>
     </div>
@@ -155,7 +156,7 @@ const formatDate = (dateStr: string) => {
     <section class="table-section">
       <div class="card-header border-none">
         <div class="header-left">
-          <h3>Active Fleet Operators</h3>
+          <h3>Drivers List</h3>
           <span class="badge-count">{{ total }} operators</span>
         </div>
         
@@ -220,7 +221,13 @@ const formatDate = (dateStr: string) => {
             <tr v-for="driver in drivers" :key="driver.driverId" class="driver-row" @click="openDriverDetails(driver.driverId)">
               <td class="driver-id">{{ driver.driverId.slice(0, 8) }}...</td>
               <td class="employee-id-cell">{{ driver.employeeId }}</td>
-              <td class="driver-name">{{ driver.firstName }} {{ driver.lastName }}</td>
+              <td class="driver-name">
+                {{ driver.firstName }} {{ driver.lastName }}
+                <div style="font-size: 11px; color: var(--color-gray-500); font-weight: 600; text-transform: uppercase; margin-top: 2px; display: flex; align-items: center; gap: 4px;">
+                  <span>{{ driver.vehicleType === 'BIKE' ? '🚲' : '🚚' }}</span>
+                  <span>{{ driver.vehicleType || 'VAN' }}</span>
+                </div>
+              </td>
               <td class="phone-cell">{{ driver.phoneNumber }}</td>
               <td class="cap-cell">{{ driver.maxPackageCapacity }} items</td>
               <td class="cap-cell">{{ driver.maxWeightCapacityKg }} kg</td>
@@ -298,7 +305,11 @@ const formatDate = (dateStr: string) => {
           </div>
 
           <div class="profile-section">
-            <h4>Terminal Constraints</h4>
+            <h4>Vehicle & Capacity</h4>
+            <div style="margin-bottom: 12px; font-weight: bold; color: var(--color-primary-dark); font-size: 13.5px; display: flex; align-items: center; gap: 6px;">
+              <span>{{ selectedDriver.vehicleType === 'BIKE' ? '🚲' : '🚚' }}</span>
+              <span>Vehicle Type: {{ selectedDriver.vehicleType || 'VAN' }}</span>
+            </div>
             <div class="capacities-grid">
               <div class="capacity-box">
                 <span class="cap-lbl">Max Packages</span>

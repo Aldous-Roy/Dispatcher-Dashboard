@@ -556,7 +556,7 @@ const triggerPrint = () => {
   <div class="manager-container">
     <!-- Printable Only Header -->
     <div class="print-banner">
-      <h2>LAST-MILE EXECUTIVE FLEET ANALYTICS REPORT</h2>
+      <h2>Performance Report</h2>
       <p class="print-meta">
         Generated: {{ new Date().toLocaleString() }} | 
         User: {{ authStore.name }} (ID: {{ authStore.employeeId }} | Role: {{ authStore.role }}) | 
@@ -649,7 +649,7 @@ const triggerPrint = () => {
       <!-- Top Action Bar -->
       <header class="main-header">
         <div class="header-titles">
-          <h1>Last-Mile Executive Dashboard</h1>
+          <h1>Manager Overview</h1>
           <p>Analytical operations overview for terminal <strong>{{ authStore.hub }}</strong></p>
         </div>
 
@@ -728,7 +728,7 @@ const triggerPrint = () => {
           <!-- Chart 1: Donut Chart SLA Distribution -->
           <div class="chart-card">
             <div class="chart-header">
-              <h3>Delivery Status Distribution</h3>
+              <h3>Order Status</h3>
               <p>Hover segments to review exact figures</p>
             </div>
             <div class="chart-content donut-layout">
@@ -1009,7 +1009,7 @@ const triggerPrint = () => {
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="suggestions-icon">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 21m0 0l-.813-5.096L3 15.187m6 .717L15 15.187m-5.465-4.757L12 3m0 0l2.465 7.43m-2.465-7.43L6 9.43m6-6.43L18 9.43" />
                 </svg>
-                <h3>SLA Insights & Actionable Suggestions</h3>
+                <h3>Performance Insights</h3>
               </div>
               <span class="live-status-pill">RECOMMENDATIONS ACTIVE</span>
             </div>
@@ -1032,7 +1032,7 @@ const triggerPrint = () => {
         <!-- Executive Summary Cards -->
         <section class="executive-summary-section">
           <div class="dashboard-card summary-card">
-            <h3>Operations Digest & Roster Overview</h3>
+            <h3>Operations Summary</h3>
             <p>
               The executive terminal has logged <strong>{{ timeframeStats.stops }} deliveries</strong> with an average completion rate of <strong>{{ Math.round(timeframeStats.completed / timeframeStats.stops * 100) }}%</strong> across active runs. 
               <strong>{{ timeframeStats.sla }}</strong> of all resolved stops met full operational SLA metrics. There are currently <strong>{{ timeframeStats.exceptions }} priority exceptions</strong> 
@@ -1057,7 +1057,7 @@ const triggerPrint = () => {
         <div class="dashboard-card table-card">
           <div class="card-header-with-filters">
             <div class="table-title">
-              <h3>Active Driver Rosters & SLA Performance</h3>
+              <h3>Driver Performance</h3>
               <p>Review real-time completion workloads and compliance details.</p>
             </div>
             
@@ -1151,7 +1151,7 @@ const triggerPrint = () => {
         <div class="dashboard-card alert-panel-card">
           <div class="alert-panel-header">
             <div>
-              <h3>Real-Time Operations Incident Feed</h3>
+              <h3>Recent Events</h3>
               <p>Acknowledge and track critical dispatcher warnings and SLA exceptions.</p>
             </div>
             <button 

@@ -147,7 +147,7 @@ const viewDetails = (routeId: string) => {
   <DashboardLayout>
     <div class="page-title-section">
       <div class="title-left">
-        <h1>Dispatch Routes</h1>
+        <h1>Routes</h1>
         <p class="subtitle">Create new corridors, assign orders, and monitor active route schedules</p>
       </div>
       <button @click="showAddDrawer = true" class="btn-create">
@@ -161,7 +161,7 @@ const viewDetails = (routeId: string) => {
     <section class="table-section">
       <div class="card-header border-none">
         <div class="header-left">
-          <h3>Registered Dispatch Schedules</h3>
+          <h3>Route List</h3>
           <span class="badge-count">{{ total }} routes</span>
         </div>
         

@@ -251,7 +251,7 @@ const formatDate = (dateStr: string) => {
   <DashboardLayout>
     <div class="page-title-section">
       <div class="title-left">
-        <h1>Stops / Orders</h1>
+        <h1>Orders</h1>
         <p class="subtitle">Import dispatch stops, register package dimensions, and change delivery execution states</p>
       </div>
       <button @click="showAddDrawer = true" class="btn-create">
@@ -265,7 +265,7 @@ const formatDate = (dateStr: string) => {
     <section class="table-section">
       <div class="card-header border-none">
         <div class="header-left">
-          <h3>Logistics Stops Registry</h3>
+          <h3>Pending Orders</h3>
           <span class="badge-count">{{ total }} items</span>
         </div>
         
@@ -394,7 +394,7 @@ const formatDate = (dateStr: string) => {
     <div class="details-drawer-overlay" v-if="showAddDrawer" @click="showAddDrawer = false">
       <div class="details-drawer" @click.stop>
         <div class="drawer-header">
-          <h2>Register Stop Order</h2>
+          <h2>Create Order</h2>
           <button @click="showAddDrawer = false" class="btn-close-drawer">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="close-icon">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />

@@ -868,7 +868,7 @@ const syncRoutesList = async () => {
     <!-- Page title and Tab switcher section -->
     <div class="page-title-section" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
       <div>
-        <h1>Logistics Terminal</h1>
+        <h1>Dispatch Hub</h1>
         <p class="subtitle">Real-time dispatch system monitoring, geocoding and corridor routing sequences</p>
       </div>
       <!-- Tab Toggles -->
@@ -950,7 +950,7 @@ const syncRoutesList = async () => {
           <!-- Route & Order Analytics Panel -->
           <section class="analytics-panel">
             <div class="card-header">
-              <h3>Operational Summary</h3>
+              <h3>Today's Overview</h3>
               <span class="badge-live">LIVE STATUS</span>
             </div>
             <div class="analytics-content">
@@ -987,7 +987,7 @@ const syncRoutesList = async () => {
           <!-- Active Driver Terminals Table -->
           <section class="table-section">
             <div class="card-header">
-              <h3>Active Driver Terminals</h3>
+              <h3>Active Drivers</h3>
               <span class="badge-live">LIVE UPDATES ACTIVE</span>
             </div>
 
@@ -1103,7 +1103,7 @@ const syncRoutesList = async () => {
           <div class="planner-board">
             <div class="board-header">
               <div class="board-info">
-                <h3>Driver Load Sequences</h3>
+                <h3>Assigned Routes</h3>
                 <p>Drag stops up and down to resequence. Drag stops between lanes to reassign drivers.</p>
               </div>
               <div class="board-actions" style="display: flex; gap: 8px;">
@@ -1274,7 +1274,7 @@ const syncRoutesList = async () => {
       <div v-else-if="currentTab === 'routes'" class="tab-pane">
         <section class="table-section">
           <div class="card-header">
-            <h3>Registered Dispatch Routes</h3>
+            <h3>Route List</h3>
             <button @click="syncRoutesList" class="btn-publish" style="padding: 6px 12px; font-size: 12px;">
               Refresh Routes List
             </button>
@@ -1331,7 +1331,7 @@ const syncRoutesList = async () => {
         <section class="table-section">
           <div class="card-header border-none" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div class="header-left">
-              <h3>Failed Stops & Exception Queue</h3>
+              <h3>Delivery Issues</h3>
               <span class="badge-count exception-count-badge">{{ failedStops.length }} failed</span>
             </div>
             <button @click="loadStopsAndExceptions" class="btn-publish" style="padding: 6px 12px; font-size: 12px;">

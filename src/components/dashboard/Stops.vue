@@ -55,6 +55,7 @@ const formLatitude = ref(12.9715987)
 const formLongitude = ref(77.594566)
 const formTimeStart = ref(new Date().toISOString().slice(0, 16))
 const formTimeEnd = ref(new Date(Date.now() + 4 * 3600 * 1000).toISOString().slice(0, 16))
+const formDeliveryDate = ref(new Date().toISOString().slice(0, 10))
 const formWeight = ref(1.0)
 const formVolume = ref(0.01)
 const formServiceMins = ref(5)
@@ -76,6 +77,7 @@ const handleAddStop = async () => {
       longitude: formLongitude.value,
       timeWindowStart: formTimeStart.value,
       timeWindowEnd: formTimeEnd.value,
+      deliveryDate: formDeliveryDate.value,
       packageWeightKg: formWeight.value,
       packageVolumeCbms: formVolume.value,
       serviceTimeMins: formServiceMins.value,
@@ -91,6 +93,7 @@ const handleAddStop = async () => {
       formAddress.value = ''
       formLatitude.value = 12.9715987
       formLongitude.value = 77.594566
+      formDeliveryDate.value = new Date().toISOString().slice(0, 10)
       formWeight.value = 1.0
       formVolume.value = 0.01
       formServiceMins.value = 5
@@ -104,6 +107,24 @@ const handleAddStop = async () => {
     formError.value = err.response?.data?.message || err.message || 'Failed to create stop'
   } finally {
     submitting.value = false
+  }
+}
+
+const allocatingRoute = ref(false)
+const handleAutoAllocateToday = async () => {
+  allocatingRoute.value = true
+  try {
+    const res = await apiClient.post('/routes/auto-allocate-today')
+    if (res.data && res.data.status === 'success') {
+      alert('Orders grouped and allocated successfully.')
+      loadData()
+    } else {
+      throw new Error(res.data.message || 'Auto allocation failed')
+    }
+  } catch (err: any) {
+    alert(err.response?.data?.message || err.message || 'Failed to auto allocate routes')
+  } finally {
+    allocatingRoute.value = false
   }
 }
 
@@ -254,12 +275,18 @@ const formatDate = (dateStr: string) => {
         <h1>Orders</h1>
         <p class="subtitle">Import dispatch stops, register package dimensions, and change delivery execution states</p>
       </div>
-      <button @click="showAddDrawer = true" class="btn-create">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="plus-icon">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-        </svg>
-        Register Stop
-      </button>
+      <div style="display: flex; gap: 12px;">
+        <button @click="handleAutoAllocateToday" class="btn-create" style="background-color: #1e40af;" :disabled="allocatingRoute">
+          <span v-if="allocatingRoute">Allocating...</span>
+          <span v-else>Auto Allocate Today's Orders</span>
+        </button>
+        <button @click="showAddDrawer = true" class="btn-create">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="plus-icon">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Register Stop
+        </button>
+      </div>
     </div>
 
     <section class="table-section">
@@ -428,6 +455,10 @@ const formatDate = (dateStr: string) => {
           <div class="form-group">
             <label>Longitude</label>
             <input type="number" step="0.0000001" v-model="formLongitude" required class="input-form" />
+          </div>
+          <div class="form-group">
+            <label>Delivery Date</label>
+            <input type="date" v-model="formDeliveryDate" required class="input-form" />
           </div>
           <div class="form-group">
             <label>Package Weight (kg)</label>

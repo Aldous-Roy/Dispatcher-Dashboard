@@ -7,6 +7,7 @@ import RouteDetails from '../components/dashboard/RouteDetails.vue'
 import Users from '../components/dashboard/Users.vue'
 import Drivers from '../components/dashboard/Drivers.vue'
 import RoutesList from '../components/dashboard/Routes.vue'
+import VisualRoutes from '../components/dashboard/VisualRoutes.vue'
 import Stops from '../components/dashboard/Stops.vue'
 import Tracking from '../components/dashboard/Tracking.vue'
 import CustomerReschedule from '../components/dashboard/CustomerReschedule.vue'
@@ -77,6 +78,12 @@ const routes = [
     path: '/routes',
     name: 'Routes',
     component: RoutesList,
+    meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
+  },
+  {
+    path: '/visual-routes',
+    name: 'VisualRoutes',
+    component: VisualRoutes,
     meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
   },
   {

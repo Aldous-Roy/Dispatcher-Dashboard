@@ -17,6 +17,7 @@ interface DriverItem {
   createdAt: string
   updatedAt: string
   vehicleType?: string
+  password?: string
 }
 
 const route = useRoute()

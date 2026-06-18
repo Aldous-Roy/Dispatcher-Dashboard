@@ -73,17 +73,31 @@ const loadDrivers = async () => {
   drivers.value = JSON.parse(JSON.stringify(fallbackDrivers))
 }
 
+const apiStats = ref<any>(null)
+
+const loadStats = async () => {
+  try {
+    const response = await apiClient.get('/reports/manager')
+    if (response.data && response.data.status === 'success') {
+      apiStats.value = response.data.data
+    }
+  } catch (err) {
+    console.warn('Failed to load manager reports from API:', err)
+  }
+}
+
 onMounted(() => {
   loadDrivers()
+  loadStats()
 })
 
 // Compute timeframe stats dynamically
 const timeframeStats = computed(() => {
-  const d1Stops = drivers.value.reduce((sum, d) => sum + d.assigned, 0) || 39
-  const d1Completed = drivers.value.reduce((sum, d) => sum + d.completed, 0) || 27
-  const d1Pending = drivers.value.reduce((sum, d) => sum + d.pending, 0) || 8
-  const d1Exceptions = drivers.value.reduce((sum, d) => sum + d.exceptions, 0) || 4
-  const activeFleet = drivers.value.filter(d => d.status !== 'Inactive').length || 5
+  const d1Stops = apiStats.value?.totalStops ?? (drivers.value.reduce((sum, d) => sum + d.assigned, 0) || 39)
+  const d1Completed = apiStats.value?.completedStops ?? (drivers.value.reduce((sum, d) => sum + d.completed, 0) || 27)
+  const d1Pending = apiStats.value?.pendingStops ?? (drivers.value.reduce((sum, d) => sum + d.pending, 0) || 8)
+  const d1Exceptions = apiStats.value?.exceptionStops ?? (drivers.value.reduce((sum, d) => sum + d.exceptions, 0) || 4)
+  const activeFleet = apiStats.value?.activeFleet ?? (drivers.value.filter(d => d.status !== 'Inactive').length || 5)
   const totalFleet = drivers.value.length || 6
 
   let multiplier = 1

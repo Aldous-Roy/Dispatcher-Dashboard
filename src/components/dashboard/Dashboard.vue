@@ -440,39 +440,33 @@ const handleStopsLoaded = async (loadedStops: ParsedStop[]) => {
   dashboardMetrics.value = null // Switch to dynamic client-side calculations
 
   for (const s of loadedStops) {
-    const latOffset = (Math.random() - 0.5) * 0.08
-    const lngOffset = (Math.random() - 0.5) * 0.08
-    const latitude = parseFloat((28.6139 + latOffset).toFixed(5))
-    const longitude = parseFloat((77.2090 + lngOffset).toFixed(5))
-    const orderId = s.id.startsWith('STP-') ? s.id.replace('STP-', 'ORD-') : s.id
-
     try {
       // POST to stops API
       await apiClient.post('/stops', {
-        orderId,
+        orderId: s.orderId,
         routeCode: null,
         customerName: s.customerName,
-        customerPhone: '+91 99999 99999',
-        deliveryAddress: s.address,
-        latitude,
-        longitude,
+        customerPhone: s.customerPhone,
+        deliveryAddress: s.deliveryAddress,
+        latitude: s.latitude,
+        longitude: s.longitude,
         timeWindowStart: new Date().toISOString().slice(0, 10) + 'T09:00:00',
         timeWindowEnd: new Date().toISOString().slice(0, 10) + 'T18:00:00',
-        packageWeightKg: s.packageCount * 1.5,
-        packageVolumeCbms: s.packageCount * 0.01,
-        serviceTimeMins: 5,
-        requiredPodType: s.priority === 'High' ? 'PHOTO_REQUIRED' : 'SIGNATURE_REQUIRED'
+        packageWeightKg: s.packageWeightKg,
+        packageVolumeCbms: s.packageVolumeCbms,
+        serviceTimeMins: s.serviceTimeMins,
+        requiredPodType: s.requiredPodType
       })
 
       const stopObj: Stop = {
-        id: orderId,
-        address: s.address,
+        id: s.orderId,
+        address: s.deliveryAddress,
         customerName: s.customerName,
-        customerPhone: '+91 99999 99999',
-        packageCount: s.packageCount,
-        priority: s.priority,
-        latitude,
-        longitude,
+        customerPhone: s.customerPhone,
+        packageCount: Math.max(1, Math.round(s.packageWeightKg / 1.5)),
+        priority: s.requiredPodType === 'SIGNATURE_REQUIRED' ? 'High' : 'Medium',
+        latitude: s.latitude,
+        longitude: s.longitude,
         geocoding: false,
         status: 'PENDING',
         failedReasonNotes: null

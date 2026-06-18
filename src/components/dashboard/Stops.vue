@@ -16,6 +16,7 @@ interface StopItem {
   estimatedArrivalTime: string | null
   createdAt: string
   updatedAt: string
+  podImageUrl?: string | null
 }
 
 // Fetch helper mapping standard REST API query parameters
@@ -266,6 +267,16 @@ const formatDate = (dateStr: string) => {
     minute: '2-digit'
   })
 }
+
+// POD Image Modal State
+const showPodModal = ref(false)
+const selectedPodImageUrl = ref<string | null>(null)
+
+const viewPodImage = (url: string | null | undefined) => {
+  if (!url) return
+  selectedPodImageUrl.value = url
+  showPodModal.value = true
+}
 </script>
 
 <template>
@@ -359,7 +370,14 @@ const formatDate = (dateStr: string) => {
                   {{ stop.status.replace(/_/g, ' ') }}
                 </span>
               </td>
-              <td class="pod-cell">{{ stop.requiredPodType }}</td>
+              <td class="pod-cell">
+                <div v-if="stop.podImageUrl">
+                  <a href="#" @click.prevent="viewPodImage(stop.podImageUrl)" style="color: var(--color-primary); text-decoration: underline;">View POD</a>
+                </div>
+                <div v-else>
+                  {{ stop.requiredPodType }}
+                </div>
+              </td>
               <td class="date-cell">{{ formatDate(stop.createdAt) }}</td>
               <td>
                 <div class="actions-cell-group">
@@ -578,6 +596,23 @@ const formatDate = (dateStr: string) => {
             <span v-if="failSubmitting">Submitting...</span>
             <span v-else>Confirm Failure</span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- POD Image Modal -->
+    <div class="details-drawer-overlay" v-if="showPodModal" @click="showPodModal = false" style="justify-content: center; align-items: center; z-index: 1000;">
+      <div class="custom-modal" @click.stop style="width: 500px;">
+        <div class="modal-header">
+          <h2>Proof of Delivery</h2>
+          <button @click="showPodModal = false" class="btn-close-drawer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="close-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body" style="text-align: center; padding: 20px;">
+          <img :src="selectedPodImageUrl || ''" alt="POD Image" style="max-width: 100%; max-height: 60vh; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);" />
         </div>
       </div>
     </div>

@@ -6,14 +6,17 @@ const emit = defineEmits<{
 }>()
 
 export interface ParsedStop {
-  id: string
-  address: string
+  orderId: string
   customerName: string
-  packageCount: number
-  priority: 'High' | 'Medium' | 'Low'
-  latitude?: number
-  longitude?: number
-  geocoding: boolean
+  customerPhone: string
+  deliveryAddress: string
+  latitude: number
+  longitude: number
+  deliveryDate: string
+  packageWeightKg: number
+  packageVolumeCbms: number
+  serviceTimeMins: number
+  requiredPodType: string
 }
 
 const isDragging = ref(false)
@@ -92,13 +95,20 @@ const parseCSV = (text: string): ParsedStop[] => {
   const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''))
   
   // Find column indices case-insensitively
-  const addressIdx = headers.findIndex(h => h.toLowerCase() === 'address')
-  const customerNameIdx = headers.findIndex(h => h.toLowerCase() === 'customer name')
-  const packageCountIdx = headers.findIndex(h => h.toLowerCase() === 'package count')
-  const priorityIdx = headers.findIndex(h => h.toLowerCase() === 'priority')
+  const orderIdIdx = headers.findIndex(h => h.toLowerCase() === 'orderid')
+  const customerNameIdx = headers.findIndex(h => h.toLowerCase() === 'customername')
+  const customerPhoneIdx = headers.findIndex(h => h.toLowerCase() === 'customerphone')
+  const deliveryAddressIdx = headers.findIndex(h => h.toLowerCase() === 'deliveryaddress')
+  const latitudeIdx = headers.findIndex(h => h.toLowerCase() === 'latitude')
+  const longitudeIdx = headers.findIndex(h => h.toLowerCase() === 'longitude')
+  const deliveryDateIdx = headers.findIndex(h => h.toLowerCase() === 'deliverydate')
+  const packageWeightKgIdx = headers.findIndex(h => h.toLowerCase() === 'packageweightkg')
+  const packageVolumeCbmsIdx = headers.findIndex(h => h.toLowerCase() === 'packagevolumecbms')
+  const serviceTimeMinsIdx = headers.findIndex(h => h.toLowerCase() === 'servicetimemins')
+  const requiredPodTypeIdx = headers.findIndex(h => h.toLowerCase() === 'requiredpodtype')
 
-  if (addressIdx === -1 || customerNameIdx === -1 || packageCountIdx === -1 || priorityIdx === -1) {
-    throw new Error('Missing required columns. CSV headers must include: "Address", "Customer Name", "Package Count", "Priority"')
+  if (orderIdIdx === -1 || customerNameIdx === -1 || deliveryAddressIdx === -1) {
+    throw new Error('Missing required columns. CSV headers must include at least: "orderId", "customerName", "deliveryAddress"')
   }
 
   const stops: ParsedStop[] = []
@@ -125,34 +135,34 @@ const parseCSV = (text: string): ParsedStop[] => {
     }
     columns.push(currentVal.trim().replace(/^["']|["']$/g, ''))
 
-    const maxIdx = Math.max(addressIdx, customerNameIdx, packageCountIdx, priorityIdx)
-    if (columns.length <= maxIdx) {
-      continue // skip malformed rows
-    }
-
-    const address = columns[addressIdx]
+    const orderId = columns[orderIdIdx]
     const customerName = columns[customerNameIdx]
-    const packageCount = parseInt(columns[packageCountIdx]) || 1
-    const rawPriority = columns[priorityIdx].toLowerCase()
+    const customerPhone = customerPhoneIdx !== -1 ? columns[customerPhoneIdx] : '+91 00000 00000'
+    const deliveryAddress = columns[deliveryAddressIdx]
+    const latitude = latitudeIdx !== -1 && columns[latitudeIdx] ? parseFloat(columns[latitudeIdx]) : 28.6139
+    const longitude = longitudeIdx !== -1 && columns[longitudeIdx] ? parseFloat(columns[longitudeIdx]) : 77.2090
+    const deliveryDate = deliveryDateIdx !== -1 && columns[deliveryDateIdx] ? columns[deliveryDateIdx] : new Date().toISOString().slice(0, 10)
+    const packageWeightKg = packageWeightKgIdx !== -1 && columns[packageWeightKgIdx] ? parseFloat(columns[packageWeightKgIdx]) : 1.0
+    const packageVolumeCbms = packageVolumeCbmsIdx !== -1 && columns[packageVolumeCbmsIdx] ? parseFloat(columns[packageVolumeCbmsIdx]) : 0.01
+    const serviceTimeMins = serviceTimeMinsIdx !== -1 && columns[serviceTimeMinsIdx] ? parseInt(columns[serviceTimeMinsIdx]) : 5
+    const requiredPodType = requiredPodTypeIdx !== -1 && columns[requiredPodTypeIdx] ? columns[requiredPodTypeIdx] : 'NONE'
     
-    let priority: 'High' | 'Medium' | 'Low' = 'Medium'
-    if (rawPriority.startsWith('h')) {
-      priority = 'High'
-    } else if (rawPriority.startsWith('l')) {
-      priority = 'Low'
-    }
-
-    if (!address || !customerName) {
-      continue // skip if address or customer name is missing
+    if (!orderId || !customerName || !deliveryAddress) {
+      continue // skip if missing critical data
     }
 
     stops.push({
-      id: `STP-${Math.floor(1000 + Math.random() * 9000)}`,
-      address,
+      orderId,
       customerName,
-      packageCount,
-      priority,
-      geocoding: true
+      customerPhone,
+      deliveryAddress,
+      latitude,
+      longitude,
+      deliveryDate,
+      packageWeightKg,
+      packageVolumeCbms,
+      serviceTimeMins,
+      requiredPodType
     })
   }
 
@@ -164,7 +174,7 @@ const parseCSV = (text: string): ParsedStop[] => {
   <div class="csv-upload-card">
     <div class="card-desc">
       <h3>CSV Import Wizard</h3>
-      <p>Import new stops directly into the planner. Files must contain the columns: <code>Address</code>, <code>Customer Name</code>, <code>Package Count</code>, and <code>Priority</code>.</p>
+      <p>Import new stops directly into the planner. Files must contain columns like: <code>orderId</code>, <code>customerName</code>, <code>deliveryAddress</code>.</p>
     </div>
 
     <!-- Drop Zone -->

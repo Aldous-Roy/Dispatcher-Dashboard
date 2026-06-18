@@ -314,7 +314,6 @@ const formatDate = (dateStr: string) => {
                 Status
                 <span v-if="sort.startsWith('active,')">{{ sort.endsWith('asc') ? '▲' : '▼' }}</span>
               </th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -338,14 +337,9 @@ const formatDate = (dateStr: string) => {
                   {{ driver.active ? 'Active' : 'Inactive' }}
                 </span>
               </td>
-              <td @click.stop>
-                <button @click="toggleDriverStatus(driver)" class="btn-toggle-status" :class="{ deactivate: driver.active }">
-                  {{ driver.active ? 'Deactivate' : 'Activate' }}
-                </button>
-              </td>
             </tr>
             <tr v-if="drivers.length === 0">
-              <td colspan="9" class="empty-row-text">No logistics operators registered.</td>
+              <td colspan="8" class="empty-row-text">No logistics operators registered.</td>
             </tr>
           </tbody>
         </table>

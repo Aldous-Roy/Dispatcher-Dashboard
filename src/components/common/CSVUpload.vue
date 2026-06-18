@@ -135,6 +135,17 @@ const parseCSV = (text: string): ParsedStop[] => {
     }
     columns.push(currentVal.trim().replace(/^["']|["']$/g, ''))
 
+    // Merge extra columns back into the address field if unquoted commas are present
+    if (columns.length > headers.length && deliveryAddressIdx !== -1) {
+      const colsAfterAddress = headers.length - 1 - deliveryAddressIdx
+      const addressParts = columns.slice(deliveryAddressIdx, columns.length - colsAfterAddress)
+      const mergedAddress = addressParts.join(', ')
+      
+      const prefix = columns.slice(0, deliveryAddressIdx)
+      const suffix = columns.slice(columns.length - colsAfterAddress)
+      columns.splice(0, columns.length, ...prefix, mergedAddress, ...suffix)
+    }
+
     const orderId = columns[orderIdIdx]
     const customerName = columns[customerNameIdx]
     const customerPhone = customerPhoneIdx !== -1 ? columns[customerPhoneIdx] : '+91 00000 00000'

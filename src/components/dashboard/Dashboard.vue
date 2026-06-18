@@ -469,7 +469,7 @@ const confirmAndInsertOrders = async () => {
     }))
 
     // Use the new bulk insert API
-    const response = await apiClient.post('/stops/bulk', payload)
+    const response = await apiClient.post('/stops-bulk', payload)
     
     if (response.data && response.data.status === 'success') {
       const createdStops = response.data.data
@@ -1576,6 +1576,54 @@ const syncRoutesList = async () => {
 </template>
 
 <style scoped>
+/* Modal Overlay Dialog Styling */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000 !important;
+}
+
+.modal-content {
+  background-color: var(--color-white);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-gray-200);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.modal-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin: 0;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--color-gray-200);
+  background-color: var(--color-gray-50);
+}
+
 .dashboard-container {
   width: 100%;
   min-height: 100vh;

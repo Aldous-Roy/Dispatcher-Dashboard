@@ -80,7 +80,16 @@ export const useAuthStore = defineStore('auth', {
       this.expiresInMs = data.expiresInMs
       this.employeeId = data.employeeId
       this.name = data.name
-      this.role = data.role
+      
+      // Map backend role names to frontend role names
+      let mappedRole = data.role
+      if (data.role === 'SUPER_ADMIN') {
+        mappedRole = 'ADMIN'
+      } else if (data.role === 'FLEET_MANGER') {
+        mappedRole = 'FLEET_MANAGER'
+      }
+      this.role = mappedRole
+
       this.loginTime = Date.now()
       this.hub = data.hub || 'Metro Logistics Hub'
       this.isMocked = !!data.isMocked
@@ -104,23 +113,12 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true
       this.error = null
 
-      if (role === 'FLEET_MANAGER' || role === 'ADMIN') {
-        const prefix = role === 'ADMIN' ? 'ADM-' : 'MGR-'
-        const simulatedToken = 'mock-manager-jwt-' + Math.random().toString(36).substr(2, 9)
-        const simulatedEmployeeId = prefix + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).substr(2, 6).toUpperCase()
-        
-        this.setSession({
-          token: simulatedToken,
-          tokenType: 'Bearer',
-          expiresInMs: 86400000, // 24 hours
-          employeeId: simulatedEmployeeId,
-          name,
-          role,
-          isMocked: true
-        })
-        this.loading = false
-        router.push('/manager/dashboard')
-        return
+      // Map frontend role to backend enum values
+      let backendRole = role
+      if (role === 'ADMIN') {
+        backendRole = 'SUPER_ADMIN'
+      } else if (role === 'FLEET_MANAGER') {
+        backendRole = 'FLEET_MANGER'
       }
       
       try {
@@ -128,7 +126,7 @@ export const useAuthStore = defineStore('auth', {
         const response = await apiClient.post('/auth/signup', {
           name,
           password,
-          role
+          role: backendRole
         })
 
         const resData = response.data
@@ -143,7 +141,12 @@ export const useAuthStore = defineStore('auth', {
             role: authData.role,
             isMocked: false
           })
-          router.push('/dashboard')
+          
+          if (this.role === 'FLEET_MANAGER' || this.role === 'ADMIN') {
+            router.push('/manager/dashboard')
+          } else {
+            router.push('/dashboard')
+          }
         } else {
           throw new Error(resData.message || 'Signup failed')
         }
@@ -155,18 +158,24 @@ export const useAuthStore = defineStore('auth', {
         if (isNetworkError) {
           // Fallback to simulated signup so user can review full functionality
           const simulatedToken = 'mock-jwt-' + Math.random().toString(36).substr(2, 9)
-          const simulatedEmployeeId = 'EMP-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).substr(2, 6).toUpperCase()
+          const simulatedEmployeeId = (role === 'ADMIN' ? 'ADM-' : role === 'FLEET_MANAGER' ? 'MGR-' : 'EMP-') + 
+            new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).substr(2, 6).toUpperCase()
           
           this.setSession({
             token: simulatedToken,
             tokenType: 'Bearer',
-            expiresInMs: 3600000, // 1 hour for standard test session
+            expiresInMs: 3600000,
             employeeId: simulatedEmployeeId,
             name,
             role,
             isMocked: true
           })
-          router.push('/dashboard')
+          
+          if (this.role === 'FLEET_MANAGER' || this.role === 'ADMIN') {
+            router.push('/manager/dashboard')
+          } else {
+            router.push('/dashboard')
+          }
         } else {
           this.error = err.response?.data?.message || err.message || 'Signup failed'
           throw err
@@ -179,25 +188,6 @@ export const useAuthStore = defineStore('auth', {
     async login(name: string, password: string, role: string = 'DISPATCHER') {
       this.loading = true
       this.error = null
-
-      if (role === 'FLEET_MANAGER' || role === 'ADMIN') {
-        const simulatedToken = 'mock-manager-jwt-' + Math.random().toString(36).substr(2, 9)
-        const simulatedEmployeeId = role === 'ADMIN' ? 'ADM-20260611-ADM01' : 'MGR-20260611-MGR99'
-        const defaultName = role === 'ADMIN' ? 'Srinivasan Admin' : 'Srinivasan Manager'
-        
-        this.setSession({
-          token: simulatedToken,
-          tokenType: 'Bearer',
-          expiresInMs: 86400000, // 24 hours
-          employeeId: simulatedEmployeeId,
-          name: name || defaultName,
-          role,
-          isMocked: true
-        })
-        this.loading = false
-        router.push('/manager/dashboard')
-        return
-      }
       
       try {
         // Let's call the API POST /api/auth/login
@@ -218,7 +208,12 @@ export const useAuthStore = defineStore('auth', {
             role: authData.role,
             isMocked: false
           })
-          router.push('/dashboard')
+          
+          if (this.role === 'FLEET_MANAGER' || this.role === 'ADMIN') {
+            router.push('/manager/dashboard')
+          } else {
+            router.push('/dashboard')
+          }
         } else {
           throw new Error(resData.message || 'Login failed')
         }
@@ -229,7 +224,7 @@ export const useAuthStore = defineStore('auth', {
         if (isNetworkError) {
           // Fallback to simulated login
           const simulatedToken = 'mock-jwt-' + Math.random().toString(36).substr(2, 9)
-          const simulatedEmployeeId = 'EMP-20260610-AB12CD'
+          const simulatedEmployeeId = role === 'ADMIN' ? 'ADM-20260611-ADM01' : role === 'FLEET_MANAGER' ? 'MGR-20260611-MGR99' : 'EMP-20260610-AB12CD'
           
           this.setSession({
             token: simulatedToken,
@@ -240,7 +235,12 @@ export const useAuthStore = defineStore('auth', {
             role,
             isMocked: true
           })
-          router.push('/dashboard')
+          
+          if (this.role === 'FLEET_MANAGER' || this.role === 'ADMIN') {
+            router.push('/manager/dashboard')
+          } else {
+            router.push('/dashboard')
+          }
         } else {
           this.error = err.response?.data?.message || err.message || 'Invalid username or password'
           throw err

@@ -28,7 +28,7 @@ interface RouteData {
   routeId: string
   routeCode: string
   routeDate: string
-  status: 'DRAFT' | 'PUBLISHED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
+  status: 'DRAFT' | 'PUBLISHED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'ASSIGNED'
   driverId: string | null
   totalDistanceKm: number
   estimatedDurationMins: number
@@ -52,6 +52,14 @@ const unassignedTotalPages = ref(0)
 const unassignedLoading = ref(false)
 const stopSearchQuery = ref('')
 const dragStopId = ref<string | null>(null)
+
+// Custom Fail Reason Modal State
+const showFailModal = ref(false)
+const failStopItem = ref<Stop | null>(null)
+const failReason = ref('Customer not available')
+const customFailReason = ref('')
+const failSubmitting = ref(false)
+const failError = ref<string | null>(null)
 
 const loadAvailableDrivers = async () => {
   try {
@@ -329,20 +337,45 @@ const completeDelivery = async (stop: Stop) => {
   }
 }
 
-const failDelivery = async (stop: Stop) => {
-  const reason = prompt('Please enter the failure reason:', 'Customer not available')
-  if (reason === null) return
+const failDelivery = (stop: Stop) => {
+  failStopItem.value = stop
+  failReason.value = 'Customer not available'
+  customFailReason.value = ''
+  failError.value = null
+  showFailModal.value = true
+}
+
+const submitFailDelivery = async () => {
+  if (!failStopItem.value) return
+  
+  const finalReason = failReason.value === 'Other' ? customFailReason.value.trim() : failReason.value
+  if (!finalReason) {
+    failError.value = 'Please enter a valid failure reason'
+    return
+  }
+  
+  failSubmitting.value = true
+  failError.value = null
   
   try {
-    const res = await apiClient.post(`/stops/${stop.id}/fail-delivery`, {
-      reason
+    const res = await apiClient.post(`/stops/${failStopItem.value.id}/fail-delivery`, {
+      reason: finalReason
     })
     if (res.data && res.data.status === 'success') {
-      stop.status = 'FAILED'
-      stop.failedReasonNotes = reason
+      if (failStopItem.value) {
+        failStopItem.value.status = 'FAILED'
+        failStopItem.value.failedReasonNotes = finalReason
+      }
+      showFailModal.value = false
+      await fetchRouteDetails()
+    } else {
+      throw new Error(res.data.message || 'Action failed')
     }
-  } catch (err) {
-    console.error(`Failed to fail delivery for stop ${stop.id}:`, err)
+  } catch (err: any) {
+    console.error('Failed to fail delivery:', err)
+    failError.value = err.response?.data?.message || err.message || 'Failed to update stop'
+  } finally {
+    failSubmitting.value = false
   }
 }
 
@@ -706,6 +739,51 @@ onMounted(() => {
         </svg>
       </div>
     </footer>
+
+    <!-- Custom Fail Reason Modal -->
+    <div class="details-drawer-overlay" v-if="showFailModal" @click="showFailModal = false" style="justify-content: center; align-items: center;">
+      <div class="custom-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Mark Stop as Failed</h2>
+          <button @click="showFailModal = false" class="btn-close-drawer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="close-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-instruction">Please specify the reason for the delivery failure. This reason will be logged and sent to the dispatcher team.</p>
+          <div class="form-group">
+            <label>Failure Reason</label>
+            <select v-model="failReason" class="input-form" style="background-color: var(--color-white); margin-bottom: 12px;">
+              <option value="Customer not available">Customer not available</option>
+              <option value="Incorrect address">Incorrect address</option>
+              <option value="Customer refused package">Customer refused package</option>
+              <option value="Package damaged">Package damaged</option>
+              <option value="Other">Other (Type custom reason below)</option>
+            </select>
+            <input 
+              v-if="failReason === 'Other' || !['Customer not available', 'Incorrect address', 'Customer refused package', 'Package damaged', 'Other'].includes(failReason)" 
+              type="text" 
+              v-model="customFailReason" 
+              class="input-form" 
+              placeholder="Enter custom reason here..."
+              required
+            />
+          </div>
+          <div v-if="failError" class="form-error-banner" style="margin-top: 12px;">
+            {{ failError }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showFailModal = false" class="btn-cancel">Cancel</button>
+          <button @click="submitFailDelivery" :disabled="failSubmitting" class="btn-submit-fail">
+            <span v-if="failSubmitting">Submitting...</span>
+            <span v-else>Confirm Failure</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1457,5 +1535,166 @@ onMounted(() => {
   .route-details-container {
     padding: 20px;
   }
+}
+
+/* Custom Modal Styles */
+.custom-modal {
+  width: 440px;
+  max-width: 90%;
+  background-color: var(--color-white);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalScaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-gray-100);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-primary-dark);
+  margin: 0;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-instruction {
+  font-size: 13px;
+  color: var(--color-gray-500);
+  margin-top: 0;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  background-color: var(--color-gray-50);
+  border-top: 1px solid var(--color-gray-100);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-cancel {
+  padding: 8px 16px;
+  border: 1.5px solid var(--color-gray-200);
+  background-color: var(--color-white);
+  color: var(--color-gray-700);
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background-color: var(--color-gray-100);
+}
+
+.btn-submit-fail {
+  padding: 8px 16px;
+  border: none;
+  background-color: #dc2626;
+  color: white;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.2s;
+}
+
+.btn-submit-fail:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.btn-submit-fail:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Custom layout overrides if needed for modal positioning within absolute context */
+.details-drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(13, 83, 14, 0.2);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  backdrop-filter: blur(2px);
+}
+.btn-close-drawer {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-gray-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.close-icon {
+  width: 20px;
+  height: 20px;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-gray-800);
+}
+.input-form {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--color-gray-200);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  background-color: var(--color-white);
+  color: var(--color-gray-800);
+  transition: all 0.2s;
+}
+.input-form:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(48, 109, 41, 0.1);
+}
+.form-error-banner {
+  background-color: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger);
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
 }
 </style>

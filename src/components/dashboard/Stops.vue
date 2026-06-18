@@ -107,6 +107,14 @@ const handleAddStop = async () => {
   }
 }
 
+// Custom Fail Reason Modal State
+const showFailModal = ref(false)
+const failStopItem = ref<StopItem | null>(null)
+const failReason = ref('Customer not available')
+const customFailReason = ref('')
+const failSubmitting = ref(false)
+const failError = ref<string | null>(null)
+
 // Assign Route Drawer State
 const showAssignDrawer = ref(false)
 const assigningStopId = ref<string | null>(null)
@@ -190,19 +198,41 @@ const completeDelivery = async (stop: StopItem) => {
   }
 }
 
-const failDelivery = async (stop: StopItem) => {
-  const reason = prompt('Please enter the failure reason:', 'Customer not available')
-  if (reason === null) return
+const failDelivery = (stop: StopItem) => {
+  failStopItem.value = stop
+  failReason.value = 'Customer not available'
+  customFailReason.value = ''
+  failError.value = null
+  showFailModal.value = true
+}
+
+const submitFailDelivery = async () => {
+  if (!failStopItem.value) return
+  
+  const finalReason = failReason.value === 'Other' ? customFailReason.value.trim() : failReason.value
+  if (!finalReason) {
+    failError.value = 'Please enter a valid failure reason'
+    return
+  }
+  
+  failSubmitting.value = true
+  failError.value = null
   
   try {
-    const res = await apiClient.post(`/stops/${stop.orderId}/fail-delivery`, {
-      reason
+    const res = await apiClient.post(`/stops/${failStopItem.value.orderId}/fail-delivery`, {
+      reason: finalReason
     })
     if (res.data && res.data.status === 'success') {
+      showFailModal.value = false
       loadData()
+    } else {
+      throw new Error(res.data.message || 'Action failed')
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('Failed to fail delivery:', err)
+    failError.value = err.response?.data?.message || err.message || 'Failed to update stop'
+  } finally {
+    failSubmitting.value = false
   }
 }
 
@@ -473,6 +503,51 @@ const formatDate = (dateStr: string) => {
             </button>
           </template>
         </form>
+      </div>
+    </div>
+
+    <!-- Custom Fail Reason Modal -->
+    <div class="details-drawer-overlay" v-if="showFailModal" @click="showFailModal = false" style="justify-content: center; align-items: center;">
+      <div class="custom-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Mark Stop as Failed</h2>
+          <button @click="showFailModal = false" class="btn-close-drawer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="close-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-instruction">Please specify the reason for the delivery failure. This reason will be logged and sent to the dispatcher team.</p>
+          <div class="form-group">
+            <label>Failure Reason</label>
+            <select v-model="failReason" class="input-form" style="background-color: var(--color-white); margin-bottom: 12px;">
+              <option value="Customer not available">Customer not available</option>
+              <option value="Incorrect address">Incorrect address</option>
+              <option value="Customer refused package">Customer refused package</option>
+              <option value="Package damaged">Package damaged</option>
+              <option value="Other">Other (Type custom reason below)</option>
+            </select>
+            <input 
+              v-if="failReason === 'Other' || !['Customer not available', 'Incorrect address', 'Customer refused package', 'Package damaged', 'Other'].includes(failReason)" 
+              type="text" 
+              v-model="customFailReason" 
+              class="input-form" 
+              placeholder="Enter custom reason here..."
+              required
+            />
+          </div>
+          <div v-if="failError" class="form-error-banner" style="margin-top: 12px;">
+            {{ failError }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showFailModal = false" class="btn-cancel">Cancel</button>
+          <button @click="submitFailDelivery" :disabled="failSubmitting" class="btn-submit-fail">
+            <span v-if="failSubmitting">Submitting...</span>
+            <span v-else>Confirm Failure</span>
+          </button>
+        </div>
       </div>
     </div>
   </DashboardLayout>
@@ -948,5 +1023,104 @@ const formatDate = (dateStr: string) => {
   color: var(--color-gray-500);
   padding: 30px !important;
   font-weight: 500;
+}
+
+/* Custom Modal Styles */
+.custom-modal {
+  width: 440px;
+  max-width: 90%;
+  background-color: var(--color-white);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalScaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-gray-100);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-primary-dark);
+  margin: 0;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-instruction {
+  font-size: 13px;
+  color: var(--color-gray-500);
+  margin-top: 0;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  background-color: var(--color-gray-50);
+  border-top: 1px solid var(--color-gray-100);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-cancel {
+  padding: 8px 16px;
+  border: 1.5px solid var(--color-gray-200);
+  background-color: var(--color-white);
+  color: var(--color-gray-700);
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background-color: var(--color-gray-100);
+}
+
+.btn-submit-fail {
+  padding: 8px 16px;
+  border: none;
+  background-color: #dc2626;
+  color: white;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.2s;
+}
+
+.btn-submit-fail:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.btn-submit-fail:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

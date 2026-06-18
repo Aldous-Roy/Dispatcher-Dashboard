@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import CSVUpload from '../common/CSVUpload.vue'
 import type { ParsedStop } from '../common/CSVUpload.vue'
 import apiClient from '../../services/api'
 import DashboardLayout from '../common/DashboardLayout.vue'
+import { useWebsocket } from '../../composables/useWebsocket'
 
 const router = useRouter()
 
@@ -26,13 +27,14 @@ interface Stop {
   geocoding: boolean
   status: 'PENDING' | 'ROUTED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'FAILED'
   failedReasonNotes?: string | null
+  rescheduledDate?: string | null
 }
 
 // Emits left for backwards compatibility if needed, but we route directly
 const emit = defineEmits(['logout'])
 
-// Active tab view: 'fleet' (original overview), 'planner' (route planning board), or 'routes' (routes list)
-const currentTab = ref<'fleet' | 'planner' | 'routes'>('fleet')
+// Active tab view: 'fleet' (original overview), 'planner' (route planning board), 'routes' (routes list), or 'exceptions' (exceptions console)
+const currentTab = ref<'fleet' | 'planner' | 'routes' | 'exceptions'>('fleet')
 
 // Drag & Drop State tracking
 const draggedStopId = ref('')
@@ -133,7 +135,8 @@ const mapApiStop = (apiStop: any): Stop => {
     longitude: apiStop.longitude || 77.594566,
     geocoding: false,
     status: apiStop.status || 'PENDING',
-    failedReasonNotes: apiStop.failedReasonNotes || null
+    failedReasonNotes: apiStop.failedReasonNotes || null,
+    rescheduledDate: apiStop.rescheduledDate || null
   }
 }
 
@@ -215,9 +218,124 @@ const loadAndSeedDrivers = async () => {
   }
 }
 
+const failedStops = ref<Stop[]>([])
+const loadingExceptions = ref(false)
+
+interface ExceptionAlert {
+  id: string
+  orderId: string
+  customerName: string
+  address: string
+  failedReasonNotes: string
+  timestamp: string
+}
+const activeAlerts = ref<ExceptionAlert[]>([])
+
+const loadStopsAndExceptions = async () => {
+  loadingExceptions.value = true
+  try {
+    const response = await apiClient.get('/stops', {
+      params: { size: 1000, sort: 'updatedAt,desc' }
+    })
+    if (response.data && response.data.status === 'success') {
+      const allStops = response.data.data?.content || response.data.data || []
+      const mapped = allStops.map(mapApiStop)
+      pendingStops.value = mapped.filter((s: Stop) => s.status === 'PENDING')
+      failedStops.value = mapped.filter((s: Stop) => s.status === 'FAILED')
+    }
+  } catch (err) {
+    console.error('Failed to load stops and exceptions:', err)
+  } finally {
+    loadingExceptions.value = false
+  }
+}
+
+const rescheduleStop = async (stop: Stop) => {
+  try {
+    const res = await apiClient.patch(`/stops/${stop.id}/status`, {
+      status: 'PENDING',
+      failedReasonNotes: null
+    })
+    if (res.data && res.data.status === 'success') {
+      await loadAndSeedDrivers()
+      await loadStopsAndExceptions()
+    }
+  } catch (err) {
+    console.error(`Failed to reschedule stop ${stop.id}:`, err)
+  }
+}
+
+const reassignStop = async (stopId: string, routeId: string) => {
+  try {
+    const assignRes = await apiClient.post(`/routes/${routeId}/assign-orders`, {
+      orderIds: [stopId]
+    })
+    if (assignRes.data && assignRes.data.status === 'success') {
+      await apiClient.patch(`/stops/${stopId}/status`, {
+        status: 'ROUTED',
+        failedReasonNotes: null
+      })
+      await loadAndSeedDrivers()
+      await loadStopsAndExceptions()
+    }
+  } catch (err) {
+    console.error(`Failed to reassign stop ${stopId} to route ${routeId}:`, err)
+  }
+}
+
+const handleReassignDropdown = async (event: Event, stopId: string) => {
+  const selectEl = event.target as HTMLSelectElement
+  const routeId = selectEl.value
+  if (!routeId) return
+  await reassignStop(stopId, routeId)
+  selectEl.value = ""
+}
+
+const {
+  connect: connectWs,
+  disconnect: disconnectWs,
+  subscribeToHighPriorityAlerts
+} = useWebsocket()
+
+const handleHighPriorityAlert = (payload: any) => {
+  console.log('High-priority fail alert received via WebSocket:', payload)
+  const newAlert: ExceptionAlert = {
+    id: Date.now().toString() + Math.random().toString().slice(2, 6),
+    orderId: payload.orderId || payload.id || 'Unknown Order',
+    customerName: payload.customerName || 'Unknown Customer',
+    address: payload.deliveryAddress || payload.address || 'Unknown Address',
+    failedReasonNotes: payload.failedReasonNotes || payload.reason || 'No details provided',
+    timestamp: new Date().toLocaleTimeString()
+  }
+  activeAlerts.value.push(newAlert)
+  setTimeout(() => {
+    dismissAlert(newAlert.id)
+  }, 10000)
+  
+  loadStopsAndExceptions()
+  loadAndSeedDrivers()
+}
+
+const dismissAlert = (id: string) => {
+  activeAlerts.value = activeAlerts.value.filter(a => a.id !== id)
+}
+
+const viewExceptionConsole = () => {
+  currentTab.value = 'exceptions'
+  activeAlerts.value = []
+}
+
 onMounted(() => {
   loadAndSeedDrivers()
   loadDashboardMetrics()
+  loadStopsAndExceptions()
+  
+  connectWs()
+  subscribeToHighPriorityAlerts(handleHighPriorityAlert)
+})
+
+onUnmounted(() => {
+  disconnectWs()
 })
 
 // DYNAMIC STATS COMPUTATIONS
@@ -617,20 +735,46 @@ const completeDelivery = async (stop: Stop) => {
   }
 }
 
-const failDelivery = async (stop: Stop) => {
-  const reason = prompt('Please enter the failure reason:', 'Customer not available')
-  if (reason === null) return // User cancelled
+const failDelivery = (stop: Stop) => {
+  failStopItem.value = stop
+  failReason.value = 'Customer not available'
+  customFailReason.value = ''
+  failError.value = null
+  showFailModal.value = true
+}
+
+const submitFailDelivery = async () => {
+  if (!failStopItem.value) return
+  
+  const finalReason = failReason.value === 'Other' ? customFailReason.value.trim() : failReason.value
+  if (!finalReason) {
+    failError.value = 'Please enter a valid failure reason'
+    return
+  }
+  
+  failSubmitting.value = true
+  failError.value = null
   
   try {
-    const res = await apiClient.post(`/stops/${stop.id}/fail-delivery`, {
-      reason
+    const res = await apiClient.post(`/stops/${failStopItem.value.id}/fail-delivery`, {
+      reason: finalReason
     })
     if (res.data && res.data.status === 'success') {
-      stop.status = 'FAILED'
-      stop.failedReasonNotes = reason
+      if (failStopItem.value) {
+        failStopItem.value.status = 'FAILED'
+        failStopItem.value.failedReasonNotes = finalReason
+      }
+      showFailModal.value = false
+      await loadAndSeedDrivers()
+      await loadStopsAndExceptions()
+    } else {
+      throw new Error(res.data.message || 'Action failed')
     }
-  } catch (err) {
-    console.error(`Failed to fail delivery for stop ${stop.id}:`, err)
+  } catch (err: any) {
+    console.error('Failed to fail delivery:', err)
+    failError.value = err.response?.data?.message || err.message || 'Failed to update stop'
+  } finally {
+    failSubmitting.value = false
   }
 }
 
@@ -642,6 +786,14 @@ interface MasterRoute {
   stopsCount: number
   status: string
 }
+// Custom Fail Reason Modal State for Dashboard
+const showFailModal = ref(false)
+const failStopItem = ref<Stop | null>(null)
+const failReason = ref('Customer not available')
+const customFailReason = ref('')
+const failSubmitting = ref(false)
+const failError = ref<string | null>(null)
+
 const masterRoutes = ref<MasterRoute[]>([])
 
 const syncRoutesList = async () => {
@@ -717,6 +869,15 @@ const syncRoutesList = async () => {
           class="header-tab-btn"
         >
           Route & Load Planner
+        </button>
+        <button 
+          @click="currentTab = 'exceptions'" 
+          :class="{ active: currentTab === 'exceptions' }" 
+          style="padding: 6px 14px; border: none; background: none; font-size: 12.5px; font-weight: 700; border-radius: 6px; cursor: pointer; color: var(--color-gray-500); transition: all 0.2s; font-family: var(--font-sans); display: flex; align-items: center;"
+          class="header-tab-btn"
+        >
+          Exceptions Console
+          <span v-if="failedStops.length > 0" class="badge-count exception-badge">{{ failedStops.length }}</span>
         </button>
       </div>
     </div>
@@ -1137,6 +1298,90 @@ const syncRoutesList = async () => {
         </section>
       </div>
 
+      <!-- Tab 4: Exceptions Console -->
+      <div v-else-if="currentTab === 'exceptions'" class="tab-pane">
+        <section class="table-section">
+          <div class="card-header border-none" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div class="header-left">
+              <h3>Failed Stops & Exception Queue</h3>
+              <span class="badge-count exception-count-badge">{{ failedStops.length }} failed</span>
+            </div>
+            <button @click="loadStopsAndExceptions" class="btn-publish" style="padding: 6px 12px; font-size: 12px;">
+              Refresh Exception Queue
+            </button>
+          </div>
+
+          <div v-if="loadingExceptions" class="loading-state-box" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; color: var(--color-gray-500);">
+            <div class="spinner" style="width: 32px; height: 32px; border-width: 3px; margin-bottom: 12px; border: 4px solid var(--color-accent-sage); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s infinite linear;"></div>
+            <p>Syncing exception queue...</p>
+          </div>
+
+          <div v-else class="table-wrapper">
+            <table class="fleet-table">
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Customer</th>
+                  <th>Address</th>
+                  <th>Failed Reason / Notes</th>
+                  <th>Reschedule Preference</th>
+                  <th>Action Needed</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="stop in failedStops" :key="stop.id">
+                  <td class="driver-id">{{ stop.id }}</td>
+                  <td class="driver-name">
+                    {{ stop.customerName }}<br>
+                    <small style="color: var(--color-gray-500); font-weight: 500;">{{ stop.customerPhone || '-' }}</small>
+                  </td>
+                  <td class="address-cell" :title="stop.address">{{ stop.address }}</td>
+                  <td style="min-width: 240px;">
+                    <div class="fail-reason-box" style="background-color: #fee2e2; color: #b91c1c; padding: 6px 10px; border-radius: 6px; font-size: 12.5px; font-weight: 600; border-left: 3.5px solid #dc2626;">
+                      ⚠️ {{ stop.failedReasonNotes || 'No notes provided by driver.' }}
+                    </div>
+                  </td>
+                  <td style="min-width: 180px;">
+                    <div v-if="stop.rescheduledDate" style="background-color: #dcfce7; color: #15803d; border-left: 3.5px solid #16a34a; padding: 6px 10px; border-radius: 6px; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                      📅 {{ stop.rescheduledDate }}
+                    </div>
+                    <span v-else style="color: var(--color-gray-500); font-style: italic; font-size: 12.5px;">
+                      No request yet
+                    </span>
+                  </td>
+                  <td>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <!-- Reschedule (Reset to pending) -->
+                      <button @click="rescheduleStop(stop)" class="btn-stop-action start" style="padding: 6px 12px; font-size: 11.5px; font-weight: 700; border-radius: 6px;">
+                        Reschedule Stop
+                      </button>
+                      
+                      <!-- Reassign directly to a driver's route -->
+                      <div class="reassign-dropdown-wrapper">
+                        <select 
+                          @change="handleReassignDropdown($event, stop.id)"
+                          style="padding: 6px 10px; border: 1.5px solid var(--color-gray-200); border-radius: 6px; font-size: 11.5px; font-weight: 600; outline: none; background-color: var(--color-white); cursor: pointer;"
+                        >
+                          <option value="" disabled selected>Reassign operator...</option>
+                          <option v-for="driver in activeDrivers.filter(d => d.routeId)" :key="driver.id" :value="driver.routeId">
+                            {{ driver.name }} ({{ driver.routeCode }})
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="failedStops.length === 0">
+                  <td colspan="5" style="text-align: center; padding: 40px; color: var(--color-gray-500); font-weight: 600;">
+                    🎉 No delivery exceptions found. All systems operational!
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
     <!-- Success Staging Toast Notification -->
     <transition name="toast">
       <div v-if="showPublishSuccess" class="publish-success-toast">
@@ -1153,6 +1398,88 @@ const syncRoutesList = async () => {
         </div>
       </div>
     </transition>
+
+    <!-- High-Priority Failure WebSocket Toast Notification Banner -->
+    <div class="high-priority-toast-container">
+      <transition-group name="toast-fade">
+        <div 
+          v-for="alert in activeAlerts" 
+          :key="alert.id" 
+          class="high-priority-alert-toast"
+        >
+          <div class="toast-content-wrapper">
+            <div class="toast-warning-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            </div>
+            <div class="toast-text-details">
+              <div class="toast-alert-title">🚨 HIGH-PRIORITY DELIVERY FAILED</div>
+              <div class="toast-order-info">
+                <strong>Order:</strong> {{ alert.orderId }} | <strong>Cust:</strong> {{ alert.customerName }}
+              </div>
+              <div class="toast-reason-text">
+                <strong>Notes:</strong> {{ alert.failedReasonNotes }}
+              </div>
+              <div class="toast-timestamp-text">{{ alert.timestamp }}</div>
+            </div>
+          </div>
+          <div class="toast-actions-row">
+            <button @click="viewExceptionConsole" class="toast-btn-action view">
+              Reschedule / Reassign
+            </button>
+            <button @click="dismissAlert(alert.id)" class="toast-btn-action dismiss">
+              Acknowledge
+            </button>
+          </div>
+        </div>
+      </transition-group>
+    </div>
+
+    <!-- Custom Fail Reason Modal -->
+    <div class="details-drawer-overlay" v-if="showFailModal" @click="showFailModal = false" style="justify-content: center; align-items: center;">
+      <div class="custom-modal" @click.stop>
+        <div class="modal-header">
+          <h2>Mark Stop as Failed</h2>
+          <button @click="showFailModal = false" class="btn-close-drawer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="close-icon">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-instruction">Please specify the reason for the delivery failure. This reason will be logged and sent to the dispatcher team.</p>
+          <div class="form-group">
+            <label>Failure Reason</label>
+            <select v-model="failReason" class="input-form" style="background-color: var(--color-white); margin-bottom: 12px;">
+              <option value="Customer not available">Customer not available</option>
+              <option value="Incorrect address">Incorrect address</option>
+              <option value="Customer refused package">Customer refused package</option>
+              <option value="Package damaged">Package damaged</option>
+              <option value="Other">Other (Type custom reason below)</option>
+            </select>
+            <input 
+              v-if="failReason === 'Other' || !['Customer not available', 'Incorrect address', 'Customer refused package', 'Package damaged', 'Other'].includes(failReason)" 
+              type="text" 
+              v-model="customFailReason" 
+              class="input-form" 
+              placeholder="Enter custom reason here..."
+              required
+            />
+          </div>
+          <div v-if="failError" class="form-error-banner" style="margin-top: 12px;">
+            {{ failError }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showFailModal = false" class="btn-cancel">Cancel</button>
+          <button @click="submitFailDelivery" :disabled="failSubmitting" class="btn-submit-fail">
+            <span v-if="failSubmitting">Submitting...</span>
+            <span v-else>Confirm Failure</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </DashboardLayout>
 </template>
 
@@ -2402,5 +2729,253 @@ const syncRoutesList = async () => {
 .route-badge.clickable:hover {
   background-color: var(--color-primary-dark);
   color: var(--color-accent-sage);
+}
+
+/* Exceptions tab custom styling */
+.exception-badge {
+  background-color: #dc2626 !important;
+  color: white !important;
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.exception-count-badge {
+  background-color: #fee2e2;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+/* High Priority WebSocket Toast Notification Styles */
+.high-priority-toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 380px;
+  max-width: 90vw;
+  pointer-events: none;
+}
+
+.high-priority-alert-toast {
+  background-color: var(--color-white);
+  border: 2px solid #ef4444;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(220, 38, 38, 0.3), 0 8px 10px -6px rgba(220, 38, 38, 0.3);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: auto;
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(120%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.toast-fade-leave-to {
+  transform: translateX(120%);
+  opacity: 0;
+  transition: all 0.3s ease;
+}
+
+.toast-content-wrapper {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.toast-warning-icon {
+  color: #dc2626;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  animation: pulseWarning 1.5s infinite;
+}
+
+@keyframes pulseWarning {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.toast-text-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toast-alert-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #b91c1c;
+  letter-spacing: 0.5px;
+}
+
+.toast-order-info {
+  font-size: 12.5px;
+  color: var(--color-gray-800);
+}
+
+.toast-reason-text {
+  font-size: 11.5px;
+  color: var(--color-gray-600);
+  background-color: #fee2e2;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border-left: 2.5px solid #dc2626;
+  margin-top: 4px;
+}
+
+.toast-timestamp-text {
+  font-size: 10px;
+  color: var(--color-gray-400);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.toast-actions-row {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--color-gray-150);
+  padding-top: 10px;
+  justify-content: flex-end;
+}
+
+.toast-btn-action {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-sans);
+}
+
+.toast-btn-action.view {
+  background-color: #dc2626;
+  color: white;
+}
+
+.toast-btn-action.view:hover {
+  background-color: #b91c1c;
+}
+
+.toast-btn-action.dismiss {
+  background-color: var(--color-gray-100);
+  color: var(--color-gray-700);
+  border: 1px solid var(--color-gray-200);
+}
+
+.toast-btn-action.dismiss:hover {
+  background-color: var(--color-200);
+}
+
+/* Custom Modal Styles */
+.custom-modal {
+  width: 440px;
+  max-width: 90%;
+  background-color: var(--color-white);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalScaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-gray-100);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-primary-dark);
+  margin: 0;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-instruction {
+  font-size: 13px;
+  color: var(--color-gray-500);
+  margin-top: 0;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  background-color: var(--color-gray-50);
+  border-top: 1px solid var(--color-gray-100);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-cancel {
+  padding: 8px 16px;
+  border: 1.5px solid var(--color-gray-200);
+  background-color: var(--color-white);
+  color: var(--color-gray-700);
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background-color: var(--color-gray-100);
+}
+
+.btn-submit-fail {
+  padding: 8px 16px;
+  border: none;
+  background-color: #dc2626;
+  color: white;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.2s;
+}
+
+.btn-submit-fail:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.btn-submit-fail:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

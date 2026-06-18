@@ -62,8 +62,11 @@ export function useWebsocket() {
     client.value = stompClient
   }
 
+  const activeAlertSubscription = ref<any>(null)
+
   const disconnect = () => {
     unsubscribe()
+    unsubscribeAlerts()
     if (client.value) {
       client.value.deactivate()
       client.value = null
@@ -122,6 +125,41 @@ export function useWebsocket() {
     }
   }
 
+  const subscribeToHighPriorityAlerts = (onAlert: (payload: any) => void) => {
+    unsubscribeAlerts()
+
+    if (!client.value || !connected.value) {
+      console.warn('[WebSocket] STOMP not connected. Postponing alert subscription.')
+      setTimeout(() => {
+        if (connected.value) {
+          subscribeToHighPriorityAlerts(onAlert)
+        }
+      }, 1000)
+      return
+    }
+
+    const topic = '/topic/alerts/high-priority-fails'
+    console.log(`[WebSocket] Subscribing to alert topic: ${topic}`)
+
+    activeAlertSubscription.value = client.value.subscribe(topic, (message) => {
+      try {
+        const payload = JSON.parse(message.body)
+        console.log('[WebSocket] Received alert payload:', payload)
+        onAlert(payload)
+      } catch (err) {
+        console.error('[WebSocket] Failed to parse alert message body:', err)
+      }
+    })
+  }
+
+  const unsubscribeAlerts = () => {
+    if (activeAlertSubscription.value) {
+      console.log('[WebSocket] Unsubscribing from alert topic')
+      activeAlertSubscription.value.unsubscribe()
+      activeAlertSubscription.value = null
+    }
+  }
+
   onUnmounted(() => {
     disconnect()
   })
@@ -133,6 +171,8 @@ export function useWebsocket() {
     connect,
     disconnect,
     subscribeToDriver,
-    unsubscribe
+    unsubscribe,
+    subscribeToHighPriorityAlerts,
+    unsubscribeAlerts
   }
 }

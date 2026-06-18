@@ -9,7 +9,16 @@ import Drivers from '../components/dashboard/Drivers.vue'
 import RoutesList from '../components/dashboard/Routes.vue'
 import Stops from '../components/dashboard/Stops.vue'
 import Tracking from '../components/dashboard/Tracking.vue'
+import CustomerReschedule from '../components/dashboard/CustomerReschedule.vue'
 import { useAuthStore } from '../stores/auth'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    requiresGuest?: boolean
+    requiredRole?: string | string[]
+  }
+}
 
 const routes = [
   {
@@ -89,6 +98,11 @@ const routes = [
     meta: { requiresAuth: true, requiredRole: ['DISPATCHER', 'SUPER_ADMIN'] }
   },
   {
+    path: '/reschedule/:orderId',
+    name: 'CustomerReschedule',
+    component: CustomerReschedule
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/'
   }
@@ -99,13 +113,13 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
   
   if (to.meta.requiresAuth) {
     if (!authStore.isAuthenticated) {
       // Redirect to the unified login screen
-      next('/login')
+      return '/login'
     } else {
       // User is authenticated, check role requirements
       const requiredRole = to.meta.requiredRole
@@ -113,27 +127,21 @@ router.beforeEach((to, _from, next) => {
       if (requiredRole && !requiredRoles.includes(authStore.role)) {
         // Terminals are siloed, route user to their correct dashboard
         if (authStore.role === 'FLEET_MANAGER' || authStore.role === 'ADMIN') {
-          next('/manager/dashboard')
+          return '/manager/dashboard'
         } else {
-          next('/dashboard')
+          return '/dashboard'
         }
-      } else {
-        next()
       }
     }
   } else if (to.meta.requiresGuest) {
     if (authStore.isAuthenticated) {
       // Authenticated users cannot go to guest pages (login/register)
       if (authStore.role === 'FLEET_MANAGER' || authStore.role === 'ADMIN') {
-        next('/manager/dashboard')
+        return '/manager/dashboard'
       } else {
-        next('/dashboard')
+        return '/dashboard'
       }
-    } else {
-      next()
     }
-  } else {
-    next()
   }
 })
 
